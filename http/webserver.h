@@ -109,9 +109,10 @@ private:
     METHOD m_method;/*记录当前连接，当前HTTP请求的方法，初值设置为GET*/ 
     oal_int8 *m_url;/*记录当前连接，当前HTTP请求的URL*/
     oal_int8 *m_version;/*记录当前连接，当前HTTP请求的HTTP版本号*/
-    oal_int8 *m_host;
-    oal_int32 m_content_length;
-    oal_bool m_linger;
+    oal_int8 *m_host;/*记录接收http请求的服务器名称和端口号*/
+    
+    oal_int32 m_content_length;/*解析请求头时使用，表示报文主体的长度，默认为0*/
+    oal_bool m_linger;/*响应报文后是否断开TCP连接，默认为false*/
     oal_int8 m_real_file[FILENAME_LEN];
     oal_int8 *m_file_address;
     struct stat m_file_stat;
@@ -158,10 +159,15 @@ oal_void http_parse::init(){
     m_checked_idx = 0;
     m_one_line_start = 0;
     m_check_state = CHECK_STATE_REQUESTLINE;
+
     m_method = GET;
     m_url = NULL;
     m_version = NULL;
     
+    m_content_length = 0;
+    m_linger = false;
+    m_host = NULL;
+
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -212,10 +218,16 @@ http_parse::HTTP_CODE http_parse::process_parse_request(){
         case CHECK_STATE_REQUESTLINE:
             LOG(LEV_INFO, "Fd[%d] is checking Request line\n", m_socket);
             ret = parse_request_line(line_text);
+            if(ret == BAD_REQUEST){
+                goto Done;
+            }
             break;
         case CHECK_STATE_HEADER:
             LOG(LEV_INFO, "Fd[%d] is checking Request header\n", m_socket);
             ret = parse_request_headers(line_text);
+            if(ret == BAD_REQUEST){
+                goto Done;
+            }
             break;
         case CHECK_STATE_CONTENT:
             LOG(LEV_INFO, "Fd[%d] is checking Request content\n", m_socket);
@@ -225,6 +237,7 @@ http_parse::HTTP_CODE http_parse::process_parse_request(){
             break;
         }
     }
+Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
@@ -340,8 +353,40 @@ Done:
 }
 http_parse::HTTP_CODE http_parse::parse_request_headers(oal_int8 *text){
     LOG(LEV_DEBUG, "Enter!\n");
+    /*该函数会多次进入，因为请求头有多行数据，而我们是以行为单位解析的*/
     HTTP_CODE ret = NO_REQUEST;
-
+    if(text[0] == '\0'){
+        if(m_content_length != 0){
+            m_checked_idx = CHECK_STATE_CONTENT;
+            ret = NO_REQUEST;
+            goto Done;
+        } else {
+            ret = GET_REQUEST;
+            goto Done;
+        }
+    } else if(strncasecmp(text, "Connection:", 11) == 0) {
+        text += 11;
+        /*跳过多余的' '或'\t'*/
+        text += strspn(text, " \t");
+        if(strcasecmp(text, "keep-alive") == 0){
+            m_linger = true;
+        }
+    } else if (strncasecmp(text, "Content-length:", 15) == 0) {
+        text += 15;
+        /*跳过多余的' '或'\t'*/
+        text += strspn(text, " \t");
+        m_content_length = atol(text);
+    } else if (strncasecmp(text, "Host:", 5) == 0) {
+        text += 5;
+        /*跳过多余的' '或'\t'*/
+        text += strspn(text, " \t");
+        m_host = text;
+    }
+    else
+    {
+        LOG(LEV_ERROR, "oop!unknow header: %s", text);
+    }
+Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
