@@ -36,8 +36,9 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-//#include <netinet/in.h>
-//#include <sys/un.h>
+
+/*atol相关头文件*/
+#include <stdlib.h>
 
 /*最大文件描述符个数*/
 #define MAX_FD 65536
