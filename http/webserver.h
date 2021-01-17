@@ -364,7 +364,6 @@ oal_int8 * http_parse::get_one_line(){
 http_parse::LINE_STATUS http_parse::step_one_line(){
     LOG(LEV_DEBUG, "Enter!\n");
     LINE_STATUS parse_line_status = LINE_OK;
-    //m_start_line = m_checked_idx;
     oal_int8 curSymbol;
     for(; m_checked_idx < m_read_idx; m_checked_idx++){
         curSymbol = m_read_buf[m_checked_idx];
