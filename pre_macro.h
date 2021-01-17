@@ -8,7 +8,7 @@
 //#define _NOTE
 
 /*LOG 测试宏*/
-//#define _LOG_TEST
+#define _LOG_TEST
 
 /*locker.h 测试宏*/
 //#define _LOCKER_TEST
