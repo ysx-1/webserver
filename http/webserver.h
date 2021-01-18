@@ -35,19 +35,19 @@ public:
     };
     enum HTTP_CODE
     {
-        NO_REQUEST = 0,
-        GET_REQUEST,
-        BAD_REQUEST,
-        NO_RESOURCE,
-        FORBIDDEN_REQUEST,
-        FILE_REQUEST = 5,
-        INTERNAL_ERROR,
-        CLOSED_CONNECTION
+        NO_REQUEST = 0,/*请求不完整，需要继续读取请求报文数据;跳转主线程继续监测读事件*/
+        GET_REQUEST,/*获得了完整的HTTP请求;调用do_request完成请求资源映射*/
+        BAD_REQUEST,/*HTTP请求报文有语法错误或请求资源为目录;跳转process_construct_rsp完成响应报文*/
+        NO_RESOURCE,/*请求资源不存在;跳转process_construct_rsp完成响应报文*/
+        FORBIDDEN_REQUEST,/*请求资源禁止访问，没有读取权限;跳转process_construct_rsp完成响应报文*/
+        FILE_REQUEST = 5,/*请求资源可以正常访问;跳转process_construct_rsp完成响应报文*/
+        INTERNAL_ERROR,/*服务器内部错误，该结果在主状态机逻辑switch的default下，一般不会触发*/
+        CLOSED_CONNECTION/*暂未使用*/
     };
     enum REQUEST_STATE{
-        READ = 0,
-        WRITE = 1,
-        REQUEST_STATE_NUM = 2
+        READ = 0,/*主线程检测到读事件时，在append之前设置状态，使工作线程根据状态，进行接收客户端请求数据的操作*/
+        WRITE = 1,/*主线程检测到写事件时，在append之前设置状态，使工作线程根据状态，进行回应客户端响应报文的操作*/
+        REQUEST_STATE_NUM = 2/*请求状态总数，此状态仅用于工作线程判断本次应该进行哪种操作（读/写）*/
     };
 public:
     http_parse(){};
@@ -119,7 +119,7 @@ private:
     struct iovec m_iv[2];
     oal_int32 m_iv_count;
     oal_int32 cgi;
-    oal_int8 *m_string; 
+    oal_int8 *m_string;/*记录HTTP请求的content内容*/ 
     oal_int32 bytes_to_send;
     oal_int32 bytes_have_send;
     oal_int8 *doc_root;
@@ -168,6 +168,8 @@ oal_void http_parse::init(){
     m_linger = false;
     m_host = NULL;
 
+    m_string = NULL;
+
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -205,6 +207,7 @@ Failed:
 }
 http_parse::HTTP_CODE http_parse::process_parse_request(){
     LOG(LEV_DEBUG, "Enter!\n");
+    /*返回的HTTP_CODE作为构建不同响应报文的参照*/
     HTTP_CODE ret = NO_REQUEST;
     LINE_STATUS line_status = LINE_OK;
     oal_int8 *line_text = NULL;
@@ -232,6 +235,7 @@ http_parse::HTTP_CODE http_parse::process_parse_request(){
         case CHECK_STATE_CONTENT:
             LOG(LEV_INFO, "Fd[%d] is checking Request content\n", m_socket);
             ret = parse_request_content(line_text);
+            line_status = LINE_OPEN;/*使得解析完content之后可以退出while循环*/
             break;
         default:
             break;
@@ -381,9 +385,7 @@ http_parse::HTTP_CODE http_parse::parse_request_headers(oal_int8 *text){
         /*跳过多余的' '或'\t'*/
         text += strspn(text, " \t");
         m_host = text;
-    }
-    else
-    {
+    } else {
         LOG(LEV_ERROR, "oop!unknow header: %s", text);
     }
 Done:
@@ -393,7 +395,13 @@ Done:
 http_parse::HTTP_CODE http_parse::parse_request_content(oal_int8 *text){
     LOG(LEV_DEBUG, "Enter!\n");
     HTTP_CODE ret = NO_REQUEST;
-
+    /*判断http请求是否被完整读入*/
+    if(m_content_length + m_checked_idx <= m_read_idx){
+        text[m_content_length] = '\0';
+        m_string = text;
+        ret = GET_REQUEST;
+        LOG(LEV_INFO, "Fd[%d] 's content is [%s]\n", m_string);
+    }
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
