@@ -53,8 +53,9 @@ public:
     http_parse(){};
     ~http_parse(){};
     oal_void process();
-    oal_void init(oal_int32 socket, struct sockaddr_in address);/*供主线程使用，初始化新的请求*/
+    oal_void init(oal_int32 socket, struct sockaddr_in address, oal_int8 *root_dir);/*供主线程使用，初始化新的请求*/
     oal_void set_request_state(REQUEST_STATE state);/*设置当前用户的状态：读/写*/
+    oal_void set_doc_root_dir(oal_int8 *root_dir);/*设置当前服务器的数据的根目录*/
 private:
     oal_void  init();/*初始化读写Buffer相关变量*/
 
@@ -65,11 +66,11 @@ private:
     oal_void  process_read_etc();/*处理新的HTTP请求报文入口:接收、解析请求并构造HTTP响应报文*/ 
     oal_void  close_conn(oal_bool real_close = true);/*关闭连接，从epoll表中删除fd，总用户数减1*/
     
-    HTTP_CODE parse_request_line(oal_int8 *text);
-    HTTP_CODE parse_request_headers(oal_int8 *text);
-    HTTP_CODE parse_request_content(oal_int8 *text);
-    HTTP_CODE do_request();
-    oal_int8  *get_one_line();
+    HTTP_CODE parse_request_line(oal_int8 *text);/*解析请求行*/
+    HTTP_CODE parse_request_headers(oal_int8 *text);/*解析请求头*/
+    HTTP_CODE parse_request_content(oal_int8 *text);/*解析请求包体*/
+    HTTP_CODE dealwith_request();/*根据解析结果(m_url、m_cgi、m_string等)处理请求，将请求类型进行更细的划分*/
+    oal_int8  *get_one_line();/*获取一行请求报文，并更新行的起始下标*/
     LINE_STATUS step_one_line();/*判断请求的某一行的合法性*/
 
     oal_bool add_response(oal_const oal_int8 *format, ...);
@@ -113,19 +114,20 @@ private:
     
     oal_int32 m_content_length;/*解析请求头时使用，表示报文主体的长度，默认为0*/
     oal_bool m_linger;/*响应报文后是否断开TCP连接，默认为false*/
-    oal_int8 m_real_file[FILENAME_LEN];
+    oal_int8 m_real_file[FILENAME_LEN];/*客户端要访问的文件的完整目录*/
     oal_int8 *m_file_address;
     struct stat m_file_stat;
     struct iovec m_iv[2];
     oal_int32 m_iv_count;
-    oal_int32 cgi;
+    oal_int32 m_cgi;/*是否是CGI请求*/
     oal_int8 *m_string;/*记录HTTP请求的content内容*/ 
     oal_int32 bytes_to_send;
     oal_int32 bytes_have_send;
-    oal_int8 *doc_root;
+    oal_static oal_int8 *m_doc_root_dir;/*服务器上文件(html或cgi或文件等)所在根目录，内存管理由webserver类负责*/
 };
 /*类的静态变量初始化*/
 oal_int32 http_parse::m_user_count = 0;
+oal_int8* http_parse::m_doc_root_dir = NULL;
 
 oal_void http_parse::process(){
     LOG(LEV_DEBUG, "Enter!\n");
@@ -144,12 +146,15 @@ oal_void http_parse::process(){
     };
     LOG(LEV_DEBUG, "Exit!\n");
 }
-oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address){
+oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address, oal_int8* root_dir){
     LOG(LEV_DEBUG, "Enter!\n");
     m_socket = socket;
     m_address = address;
     /*用户计数+1*/
     m_user_count++;
+
+    m_doc_root_dir = root_dir;
+
     init();
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -161,6 +166,7 @@ oal_void http_parse::init(){
     m_check_state = CHECK_STATE_REQUESTLINE;
 
     m_method = GET;
+    m_cgi = 0;
     m_url = NULL;
     m_version = NULL;
     
@@ -170,6 +176,7 @@ oal_void http_parse::init(){
 
     m_string = NULL;
 
+
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -177,6 +184,12 @@ oal_void http_parse::set_request_state(REQUEST_STATE state){
     LOG(LEV_DEBUG, "Enter!\n");
     m_request_state = state;
     LOG(LEV_INFO, "The state of [%d] is [%d]\n", m_socket, m_request_state);
+    LOG(LEV_DEBUG, "Exit!\n");
+}
+oal_void http_parse::set_doc_root_dir(oal_int8 *root_dir){
+    LOG(LEV_DEBUG, "Enter!\n");
+    m_doc_root_dir = root_dir;
+    LOG(LEV_INFO, "Server's root dir = [%s]\n", m_doc_root_dir);
     LOG(LEV_DEBUG, "Exit!\n");
 }
 oal_bool http_parse::recv_client_data(){
@@ -222,6 +235,7 @@ http_parse::HTTP_CODE http_parse::process_parse_request(){
             LOG(LEV_INFO, "Fd[%d] is checking Request line\n", m_socket);
             ret = parse_request_line(line_text);
             if(ret == BAD_REQUEST){
+                //请求“语法”有问题，结束状态机
                 goto Done;
             }
             break;
@@ -229,12 +243,20 @@ http_parse::HTTP_CODE http_parse::process_parse_request(){
             LOG(LEV_INFO, "Fd[%d] is checking Request header\n", m_socket);
             ret = parse_request_headers(line_text);
             if(ret == BAD_REQUEST){
+                //请求“语法”有问题，结束状态机
+                goto Done;
+            } else if(ret == GET_REQUEST){
+                //请求Method为GET，无Content，解析完成，结束状态机
                 goto Done;
             }
             break;
         case CHECK_STATE_CONTENT:
             LOG(LEV_INFO, "Fd[%d] is checking Request content\n", m_socket);
             ret = parse_request_content(line_text);
+            if(ret == GET_REQUEST){
+                //请求Method为POST等，Content已保存，解析完成，结束状态机
+                goto Done;
+            }
             line_status = LINE_OPEN;/*使得解析完content之后可以退出while循环*/
             break;
         default:
@@ -270,6 +292,10 @@ oal_void http_parse::process_read_etc(){
         m_utils.modfd(m_socket, EPOLLIN, 0);
         return;
     }
+    if(parse_ret == GET_REQUEST){
+        LOG(LEV_INFO, "process_parse_request success, Now begin to dealwith request!\n");
+        parse_ret = dealwith_request();
+    }
     add_rsp_ret = process_construct_rsp(parse_ret);
     if(add_rsp_ret != true){
         /*构建响应报文失败，关闭连接*/
@@ -300,9 +326,11 @@ http_parse::HTTP_CODE http_parse::parse_request_line(oal_int8 *text){
     /*在m_method末尾添加'\0',同时向后移动指针，使其指向m_url*/
     *m_url++ = '\0';
 
+    /*目前仅支持GET和POST两种方法*/
     if(strcasecmp(text, "GET") == 0){
         m_method = GET;
     } else if(strcasecmp(text, "POST") == 0){
+        m_cgi = 1;
         m_method = POST;
     } else {
         ret = BAD_REQUEST;
@@ -359,6 +387,14 @@ http_parse::HTTP_CODE http_parse::parse_request_headers(oal_int8 *text){
     LOG(LEV_DEBUG, "Enter!\n");
     /*该函数会多次进入，因为请求头有多行数据，而我们是以行为单位解析的*/
     HTTP_CODE ret = NO_REQUEST;
+
+    /*text[0] = '\0'时，说明本行是请求头和报文Content之间的空行"\r\n",即请求头解析完成 */
+    /*
+      如果请求报文里有两个空行:可能会导致后续解析content出问题;
+      如果请求头里有空行:可能会导致状态机的状态错误;
+      这说明了报文格式要严格遵循协议，否则会造成意想不到的问题。
+      这也是当前写法的一漏洞，待完善。
+    */
     if(text[0] == '\0'){
         if(m_content_length != 0){
             m_checked_idx = CHECK_STATE_CONTENT;
@@ -414,6 +450,13 @@ oal_int8 * http_parse::get_one_line(){
     LOG(LEV_DEBUG, "Exit!\n");
     return line_start; 
 };
+http_parse::HTTP_CODE http_parse::dealwith_request(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    HTTP_CODE ret = FILE_REQUEST;/*至少是文件请求*/
+
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
 http_parse::LINE_STATUS http_parse::step_one_line(){
     LOG(LEV_DEBUG, "Enter!\n");
     LINE_STATUS parse_line_status = LINE_OK;
@@ -460,6 +503,7 @@ oal_void http_parse::process_write_etc(){
 }
 
 class web_server{
+    oal_static oal_const oal_int32 server_path_max_len = 200;
 public:
     web_server();
     ~web_server();
@@ -489,17 +533,31 @@ private:
 
     /*eventloop 停止标志位*/
     oal_bool m_eventloop_stop;
+
+    /*服务器工作目录*/
+    oal_int8 *m_doc_root_dir;
 };
 
 web_server::web_server() {
     LOG(LEV_DEBUG, "Enter!\n");
+    //server root文件夹路径
+    oal_int8 server_path[server_path_max_len];
+    oal_int8 root[6] = "/root";
+
     poolIsInit = false;
-    users = new http_parse[MAX_FD]; 
+    users = new http_parse[MAX_FD];
+    m_doc_root_dir = new oal_int8[strlen(server_path) + strlen(root) + 1];
+
+    /*获取服务进程所在工作目录*/
+    getcwd(server_path, server_path_max_len);
+    strcpy(m_doc_root_dir, server_path);
+    strcat(m_doc_root_dir, root);
     LOG(LEV_DEBUG, "Exit!\n");
 }
 web_server::~web_server() {
     LOG(LEV_DEBUG, "Enter!\n");
     delete []users;
+    delete []m_doc_root_dir;
     if (poolIsInit) delete m_pool;
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -636,7 +694,7 @@ oal_bool web_server::dealclientdata() {
         oal_int8 remote[INET_ADDRSTRLEN];
         LOG(LEV_INFO, "connected client [%s:%d]\n", inet_ntop(AF_INET, &client_addr.sin_addr,remote, INET_ADDRSTRLEN),
                 ntohs(client_addr.sin_port));
-        users[confd].init(confd, client_addr);
+        users[confd].init(confd, client_addr, m_doc_root_dir);
         /*重置m_tcp_socket 为oneshot*/
         m_utils.modfd(m_listen_fd, EPOLLIN, 0);
     }
