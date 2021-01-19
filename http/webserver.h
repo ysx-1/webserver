@@ -374,9 +374,6 @@ http_parse::HTTP_CODE http_parse::parse_request_line(oal_int8 *text){
         LOG(LEV_ERROR, "Fd[%d]'S file path is invalid[%s]!\n", m_socket, m_url);
         goto Done;
     }
-    if(strlen(m_url) == 1){
-        strcat(m_url, "default.html");
-    }
     /*HTTP请求行解析完成，更新check状态*/
     m_check_state = CHECK_STATE_HEADER;
 Done:
@@ -453,7 +450,71 @@ oal_int8 * http_parse::get_one_line(){
 http_parse::HTTP_CODE http_parse::dealwith_request(){
     LOG(LEV_DEBUG, "Enter!\n");
     HTTP_CODE ret = FILE_REQUEST;/*至少是文件请求*/
+    oal_int32 rdir_name_len = strlen(m_doc_root_dir);
+    oal_const oal_int8* request_file_index = strrchr(m_url, '/');
+    oal_int32 fd = -1;/*m_real_file 文件描述符*/
 
+    /*将工作根路径拷贝到m_real_file*/
+    strcpy(m_real_file, m_doc_root_dir);
+
+    if(m_cgi == 1 && (*(request_file_index + 1) == 2 || *(request_file_index + 1) == 3)){
+        //根据标志判断是登录检测还是注册检测
+
+        //同步线程登录校验
+
+        //CGI多进程登录校验
+    }
+    if(strlen(m_url) == 1){
+        /*URL末尾只有一个'/'使其显示默认页面*/
+        strcat(m_real_file, "/default.html");
+
+    /*如果请求资源为/0，表示跳转注册界面*/
+    } else if(*(request_file_index + 1) == 0){
+        strcat(m_real_file, "/register.html");
+
+    /*如果请求资源为/1，表示跳转登录界面*/
+    } else if(*(request_file_index + 1) == 1){
+        strcat(m_real_file, "/log.html");
+
+    /*如果请求资源为/5，表示跳转图片界面*/    
+    } else if(*(request_file_index + 1) == 5){
+        strcat(m_real_file, "/picture.html");
+
+    /*如果请求资源为/6，表示跳转视频界面*/    
+    } else if(*(request_file_index + 1) == 6){
+        strcat(m_real_file, "/video.html");
+
+    } else {
+        /*如果以上均不符合
+        这里的情况是welcome界面，请求服务器上的一个图片*/
+        strcat(m_real_file, "/welcome.html");
+    }
+
+    if (stat(m_real_file, &m_file_stat) < 0){
+        ret =  NO_RESOURCE;
+        LOG(LEV_ERROR, "stat File [%s] error", m_real_file);
+        LOG_ERRNO(":");
+        goto Done;
+    }
+    /*判断文件是否为其他用户可读*/
+    if(!m_file_stat.st_mode & S_IROTH){
+        ret = FORBIDDEN_REQUEST;
+        LOG(LEV_ERROR, "File [%s] is rejected to visit!", m_real_file);
+        goto Done;
+    }
+    /*判断"文件"是否是目录*/
+    if(S_ISDIR(m_file_stat.st_mode)){
+        ret = BAD_REQUEST;
+        LOG(LEV_ERROR, "File [%s] is a dir!", m_real_file);
+        goto Done;
+    }
+
+    fd = open(m_real_file, O_RDONLY);
+    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    //m_utils.close_socket
+    close(fd);
+
+Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
