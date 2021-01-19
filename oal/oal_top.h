@@ -19,6 +19,12 @@
 /*sleep等 头文件*/
 #include <unistd.h>
 
+/*查询“文件”状态*/
+#include<sys/stat.h>
+
+/*mmap函数相关头文件*/
+#include <sys/mman.h>
+
 /*list 头文件*/
 #include<list>
 
