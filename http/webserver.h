@@ -87,18 +87,18 @@ private:
     LINE_STATUS step_one_line();/*判断请求的某一行的合法性*/
 
     oal_bool add_rsp_to_write_buffer(oal_const oal_int8 *format, ...);/*向write_buffer中添加响应内容*/
-    oal_bool add_status_line(oal_int32 status, oal_const oal_int8 *title);
-    oal_bool add_headers(oal_int32 content_length);
-    oal_bool add_content(oal_const oal_int8 *content);
-    oal_bool add_content_type();
-    oal_bool add_content_length(oal_int32 content_length);
-    oal_bool add_linger();
-    oal_bool add_blank_line();
+    oal_bool add_status_line(oal_int32 status, oal_const oal_int8 *title);/*添加状态行*/
+    oal_bool add_headers(oal_int32 content_length);/*添加响应报文头*/
+    oal_bool add_content(oal_const oal_int8 *content);/*添加content*/
+    oal_bool add_content_type();/*添加content类型*/
+    oal_bool add_content_length(oal_int32 content_length);/*添加content长度*/
+    oal_bool add_linger();/*添加Connection:字段*/
+    oal_bool add_blank_line();/*添加空行/r/n*/
 
     /*发送响应报文以及涉及到的html等文件，到客户端 相关*/
-    oal_void unmap();
+    oal_void unmap();/*解除文件映射*/
     oal_bool send_request_rsp();/*发送已经构造完成的HTTP响应报文*/
-    oal_void process_write_etc();/*发送已经构造好的HTTP响应入口*/
+    oal_bool process_write_etc();/*发送已经构造好的HTTP响应入口*/
 public:
     oal_static oal_int32 m_user_count;/*当前用户总数，类共有成员，大于MAX_FD时，不再接收新的连接请求*/
 private:
@@ -135,7 +135,7 @@ private:
     oal_int32 m_cgi;/*是否是CGI请求*/
     oal_int8 *m_string;/*记录HTTP请求的content内容*/ 
     oal_int32 m_bytes_to_send;/*记录要发送的响应报文的总字节数*/
-    oal_int32 bytes_have_send;
+    oal_int32 m_bytes_have_send;/*记录已经发送的响应报文的总字节数*/
     oal_static oal_int8 *m_doc_root_dir;/*服务器上文件(html或cgi或文件等)所在根目录，内存管理由webserver类负责*/
 };
 /*类的静态变量初始化*/
@@ -191,6 +191,8 @@ oal_void http_parse::init(){
 
     m_write_idx = 0;
     m_bytes_to_send = 0;
+
+    m_bytes_have_send = 0;
 
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
     memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
@@ -728,11 +730,84 @@ oal_bool http_parse::add_blank_line(){
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
-
-oal_void http_parse::process_write_etc(){
+oal_void http_parse::unmap(){
     LOG(LEV_DEBUG, "Enter!\n");
+    if (m_file_address)
+    {
+        munmap(m_file_address, m_file_stat.st_size);
+        m_file_address = 0;
+    }
+    LOG(LEV_DEBUG, "Exit!\n");
+}
+oal_bool http_parse::send_request_rsp(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    oal_int32 write_len = 0;
+    if(m_bytes_to_send <= 0){
+        /*已经无数据需要发送，监听读事件*/
+        m_utils.modfd(m_socket, EPOLLIN, 0);
+        /*保存、解析报文;构造响应报文等辅助变量的复位*/
+        init();
+        ret = true;
+        goto Done;
+    }
+    while(1){
+        write_len = writev(m_socket, m_iv, m_iv_count);
+        if(write_len < 0){
+            if(errno == EAGAIN){
+                /*没有足够资源，执行失败，提示再试一次*/
+                LOG_ERRNO("writev error:")
+                m_utils.modfd(m_socket, EPOLLOUT, 0);
+                ret = true;
+                goto Done;
+            }
+            unmap();
+            ret = false;
+            goto Done;
+        }
+
+        m_bytes_have_send += write_len;
+        m_bytes_to_send -= write_len;
+        if (m_bytes_to_send >= m_write_idx)
+        {
+            m_iv[0].iov_len = 0;
+            m_iv[1].iov_base = m_file_address + (m_bytes_to_send - m_write_idx);
+            m_iv[1].iov_len = m_bytes_to_send;
+        }
+        else
+        {
+            m_iv[0].iov_base = m_write_buf + m_bytes_have_send;
+            m_iv[0].iov_len = m_iv[0].iov_len - m_bytes_have_send;
+        }
+
+        if (m_bytes_to_send <= 0)
+        {
+            unmap();
+            m_utils.modfd(m_socket, EPOLLIN, 0);
+            /*为什么while循环外没有？*/
+            if (m_linger)
+            {
+                init();
+                ret = true;
+                goto Done;
+            }
+            else
+            {
+                ret = false;
+                goto Done;
+            }
+        }
+    }
+Done:
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::process_write_etc(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
 
     LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
 }
 
 class web_server{
