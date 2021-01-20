@@ -12,6 +12,19 @@ public:
     oal_static oal_const oal_int32 FILENAME_LEN = 200;
     oal_static oal_const oal_int32 READ_BUFFER_SIZE = 2048;
     oal_static oal_const oal_int32 WRITE_BUFFER_SIZE = 1024;
+    
+    /*定义http响应的一些状态信息*/
+    oal_const oal_int8 *ok_200_title = "OK";
+    oal_const oal_int8 *ok_string = "<html><body></body></html>";
+    oal_const oal_int8 *error_400_title = "Bad Request";
+    oal_const oal_int8 *error_400_form = "Your request has bad syntax or is inherently impossible to staisfy.\n";
+    oal_const oal_int8 *error_403_title = "Forbidden";
+    oal_const oal_int8 *error_403_form = "You do not have permission to get file form this server.\n";
+    oal_const oal_int8 *error_404_title = "Not Found";
+    oal_const oal_int8 *error_404_form = "The requested file was not found on this server.\n";
+    oal_const oal_int8 *error_500_title = "Internal Error";
+    oal_const oal_int8 *error_500_form = "There was an unusual problem serving the request file.\n";
+
     enum METHOD {
         GET = 0,
         POST,
@@ -73,10 +86,10 @@ private:
     oal_int8  *get_one_line();/*获取一行请求报文，并更新行的起始下标*/
     LINE_STATUS step_one_line();/*判断请求的某一行的合法性*/
 
-    oal_bool add_response(oal_const oal_int8 *format, ...);
-    oal_bool add_content(oal_const oal_int8 *content);
+    oal_bool add_rsp_to_write_buffer(oal_const oal_int8 *format, ...);/*向write_buffer中添加响应内容*/
     oal_bool add_status_line(oal_int32 status, oal_const oal_int8 *title);
     oal_bool add_headers(oal_int32 content_length);
+    oal_bool add_content(oal_const oal_int8 *content);
     oal_bool add_content_type();
     oal_bool add_content_length(oal_int32 content_length);
     oal_bool add_linger();
@@ -103,8 +116,8 @@ private:
     oal_int32 m_read_idx;/*当前read_buf里数据的总字节数*/
     oal_int32 m_checked_idx;/*即将解析下一行的开头*/
     oal_int32 m_one_line_start;/*当前解析行的开头*/
-    oal_int8 m_write_buf[WRITE_BUFFER_SIZE];
-    oal_int32 m_write_idx;
+    oal_int8 m_write_buf[WRITE_BUFFER_SIZE];/*暂存响应报文的buffer*/
+    oal_int32 m_write_idx;/*当前m_write_buf里的数据字节数*/
     CHECK_STATE m_check_state;/*当前在解析HTTP请求报文的哪一部分,初值设置为CHECK_STATE_REQUESTLINE*/
     
     METHOD m_method;/*记录当前连接，当前HTTP请求的方法，初值设置为GET*/ 
@@ -115,13 +128,13 @@ private:
     oal_int32 m_content_length;/*解析请求头时使用，表示报文主体的长度，默认为0*/
     oal_bool m_linger;/*响应报文后是否断开TCP连接，默认为false*/
     oal_int8 m_real_file[FILENAME_LEN];/*客户端要访问的文件的完整目录*/
-    oal_int8 *m_file_address;
-    struct stat m_file_stat;
-    struct iovec m_iv[2];
-    oal_int32 m_iv_count;
+    oal_int8 *m_file_address;/*要发送文件的mmap句柄*/
+    struct stat m_file_stat;/*记录要发送文件的状态*/
+    struct iovec m_iv[2];/*要发送数据的向量组*/
+    oal_int32 m_iv_count;/*要发送数据的向量组中的向量个数*/
     oal_int32 m_cgi;/*是否是CGI请求*/
     oal_int8 *m_string;/*记录HTTP请求的content内容*/ 
-    oal_int32 bytes_to_send;
+    oal_int32 m_bytes_to_send;/*记录要发送的响应报文的总字节数*/
     oal_int32 bytes_have_send;
     oal_static oal_int8 *m_doc_root_dir;/*服务器上文件(html或cgi或文件等)所在根目录，内存管理由webserver类负责*/
 };
@@ -176,8 +189,11 @@ oal_void http_parse::init(){
 
     m_string = NULL;
 
+    m_write_idx = 0;
+    m_bytes_to_send = 0;
 
     memset(m_read_buf, '\0', READ_BUFFER_SIZE);
+    memset(m_write_buf, '\0', WRITE_BUFFER_SIZE);
     LOG(LEV_DEBUG, "Exit!\n");
 }
 oal_void http_parse::set_request_state(REQUEST_STATE state){
@@ -269,8 +285,82 @@ Done:
 }
 oal_bool http_parse::process_construct_rsp(HTTP_CODE parse_ret){
     LOG(LEV_DEBUG, "Enter!\n");
+    LOG(LEV_INFO, "Fd[%d]'s status code of process is [%d]\n", m_socket, parse_ret);
     oal_bool ret = true;
-
+    switch(parse_ret){
+        case BAD_REQUEST:
+        {
+            add_status_line(404, error_404_title);
+            add_headers(strlen(error_404_form));
+            if (!add_content(error_404_form)){
+                ret = false;
+                goto Done;
+            }   
+            break;
+        }
+        case NO_RESOURCE:
+        {
+            ret = false;
+            goto Done;
+            break;
+        }
+        case FORBIDDEN_REQUEST:
+        {
+            add_status_line(403, error_403_title);
+            add_headers(strlen(error_403_form));
+            if (!add_content(error_403_form)){
+                ret = false;
+                goto Done;
+            }
+            break;
+        }
+        case FILE_REQUEST:
+        {
+            add_status_line(200, ok_200_title);
+            if (m_file_stat.st_size != 0)
+            {
+                add_headers(m_file_stat.st_size);
+                m_iv[0].iov_base = m_write_buf;
+                m_iv[0].iov_len = m_write_idx;
+                m_iv[1].iov_base = m_file_address;
+                m_iv[1].iov_len = m_file_stat.st_size;
+                m_iv_count = 2;
+                m_bytes_to_send = m_write_idx + m_file_stat.st_size;
+                ret =  true;
+                goto Done;
+            }
+            else
+            {
+                add_headers(strlen(ok_string));
+                if (!add_content(ok_string)){
+                    ret = false;
+                    goto Done;
+                }
+            }
+            break;
+        }
+        case INTERNAL_ERROR:
+        {
+            add_status_line(500, error_500_title);
+            add_headers(strlen(error_500_form));
+            if (!add_content(error_500_form)){
+                ret = false;
+                goto Done;
+            }  
+            break;
+        }
+        default:
+        {
+            ret = false;
+            goto Done;
+            break;
+        }
+    }
+    m_iv[0].iov_base = m_write_buf;
+    m_iv[0].iov_len = m_write_idx;
+    m_iv_count = 1;
+    m_bytes_to_send = m_write_idx;
+Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
@@ -510,7 +600,7 @@ http_parse::HTTP_CODE http_parse::dealwith_request(){
     }
 
     fd = open(m_real_file, O_RDONLY);
-    m_file_address = (char *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    m_file_address = (oal_int8 *)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
     //m_utils.close_socket
     close(fd);
 
@@ -555,6 +645,88 @@ http_parse::LINE_STATUS http_parse::step_one_line(){
 Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return parse_line_status;
+}
+
+oal_bool http_parse::add_rsp_to_write_buffer(oal_const oal_int8 *format, ...){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    oal_int32 add_len = 0;
+    if(m_write_idx >= WRITE_BUFFER_SIZE){
+        ret = false;
+        LOG(LEV_ERROR, "Fd[%d] Write buffer is full!\n", m_socket);
+        goto Done;
+    }
+    va_list arg_list;
+    va_start(arg_list, format);
+    add_len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - m_write_idx - 1, format, arg_list);
+    if(add_len < 0){
+        va_end(arg_list);
+        ret = false;
+        LOG_ERRNO("Add RSP failed:");
+        goto Done;
+    }
+    va_end(arg_list);
+    m_write_idx += add_len;
+
+    LOG(LEV_ERROR, "Fd[%d]'s request:%s", m_socket, m_write_buf);
+Done:
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+
+oal_bool http_parse::add_status_line(oal_int32 status, oal_const oal_int8 *title){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    /*默认为HTTP/1.1*/
+    ret = add_rsp_to_write_buffer("%s %d %s/r/n", "HTTP/1.1", status, title);
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_headers(oal_int32 content_length){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    ret = add_content_length(content_length)\
+            && add_linger()\
+            && add_blank_line();
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_content(oal_const oal_int8 *content){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    ret = add_rsp_to_write_buffer("%s", content);
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_content_type(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    /*暂时默认为text/html*/
+    ret = add_rsp_to_write_buffer("Content-Type:%s\r\n", "text/html");
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_content_length(oal_int32 content_length){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    ret = add_rsp_to_write_buffer("Content-Length:%d\r\n", content_length);
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_linger(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    ret = add_rsp_to_write_buffer("Connection:%s\r\n", \
+            (m_linger == true) ? "keep-alive" : "close");
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
+}
+oal_bool http_parse::add_blank_line(){
+    LOG(LEV_DEBUG, "Enter!\n");
+    oal_bool ret = true;
+    ret = add_rsp_to_write_buffer("%s", "/r/n");
+    LOG(LEV_DEBUG, "Exit!\n");
+    return ret;
 }
 
 oal_void http_parse::process_write_etc(){
