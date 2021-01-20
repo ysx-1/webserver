@@ -49,6 +49,9 @@
 /*var_list等相关头文件*/
 #include <stdarg.h>
 
+/*writev函数头文件*/
+#include <sys/uio.h>
+
 /*最大文件描述符个数*/
 #define MAX_FD 65536
 
