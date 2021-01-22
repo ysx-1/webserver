@@ -66,9 +66,9 @@ public:
     http_parse(){};
     ~http_parse(){};
     oal_void process();
-    oal_void init(oal_int32 socket, struct sockaddr_in address, oal_int8 *root_dir);/*供主线程使用，初始化新的请求*/
+    oal_void init(oal_int32 socket, struct sockaddr_in address);/*供主线程使用，初始化新的请求*/
     oal_void set_request_state(REQUEST_STATE state);/*设置当前用户的状态：读/写*/
-    oal_void set_doc_root_dir(oal_int8 *root_dir);/*设置当前服务器的数据的根目录*/
+    oal_static oal_void set_doc_root_dir(oal_int8 *root_dir);/*设置当前服务器的数据的根目录*/
 private:
     oal_void  init();/*初始化读写Buffer相关变量*/
 
@@ -159,14 +159,12 @@ oal_void http_parse::process(){
     };
     LOG(LEV_DEBUG, "Exit!\n");
 }
-oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address, oal_int8* root_dir){
+oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address){
     LOG(LEV_DEBUG, "Enter!\n");
     m_socket = socket;
     m_address = address;
     /*用户计数+1*/
     m_user_count++;
-
-    m_doc_root_dir = root_dir;
 
     init();
     LOG(LEV_DEBUG, "Exit!\n");
@@ -873,6 +871,8 @@ oal_void web_server::init(oal_int16 port, oal_int32 thread_nums) {
     LOG(LEV_DEBUG, "Enter!\n");
     m_port = port;
     m_thread_nums = thread_nums;
+    /*设置http_parse工作目录*/
+    http_parse::set_doc_root_dir(m_doc_root_dir);
     LOG(LEV_INFO, "m_port = [%d]\n", m_port);
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -955,8 +955,13 @@ oal_void web_server::eventloop() {
                 m_utils.removefd(sockfd);
             } else if (events[i].events & EPOLLIN){
                 /*TCP 可读*/
+                users[sockfd].set_request_state(http_parse::READ);
                 m_pool->append(users + sockfd);
-            } else {
+            } else if (events[i].events & EPOLLOUT){
+                /*TCP 可读*/
+                users[sockfd].set_request_state(http_parse::WRITE);
+                m_pool->append(users + sockfd);
+            }else {
                 LOG(LEV_WARN, "something else happened \n");
             }
         }
@@ -1002,7 +1007,7 @@ oal_bool web_server::dealclientdata() {
         oal_int8 remote[INET_ADDRSTRLEN];
         LOG(LEV_INFO, "connected client [%s:%d]\n", inet_ntop(AF_INET, &client_addr.sin_addr,remote, INET_ADDRSTRLEN),
                 ntohs(client_addr.sin_port));
-        users[confd].init(confd, client_addr, m_doc_root_dir);
+        users[confd].init(confd, client_addr);
         /*重置m_tcp_socket 为oneshot*/
         m_utils.modfd(m_listen_fd, EPOLLIN, 0);
     }
