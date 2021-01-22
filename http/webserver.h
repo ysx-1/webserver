@@ -228,6 +228,7 @@ oal_bool http_parse::recv_client_data(){
     } else {
         m_read_idx += bytes_read;
         LOG(LEV_INFO, "connect[%d] recv [%d] bytes!\n", m_socket, bytes_read);
+        LOG(LEV_DEBUG, "\n[%d] bytes:\n", bytes_read, m_read_buf + m_read_idx);
         ret = true;
     }
 Failed:
@@ -509,7 +510,7 @@ http_parse::HTTP_CODE http_parse::parse_request_headers(oal_int8 *text){
         text += strspn(text, " \t");
         m_host = text;
     } else {
-        LOG(LEV_ERROR, "oop!unknow header: %s", text);
+        LOG(LEV_ERROR, "oop!unknow header: %s\n", text);
     }
 Done:
     LOG(LEV_DEBUG, "Exit!\n");
@@ -582,20 +583,20 @@ http_parse::HTTP_CODE http_parse::dealwith_request(){
 
     if (stat(m_real_file, &m_file_stat) < 0){
         ret =  NO_RESOURCE;
-        LOG(LEV_ERROR, "stat File [%s] error", m_real_file);
+        LOG(LEV_ERROR, "stat File [%s] error\n", m_real_file);
         LOG_ERRNO(":");
         goto Done;
     }
     /*判断文件是否为其他用户可读*/
     if(!m_file_stat.st_mode & S_IROTH){
         ret = FORBIDDEN_REQUEST;
-        LOG(LEV_ERROR, "File [%s] is rejected to visit!", m_real_file);
+        LOG(LEV_ERROR, "File [%s] is rejected to visit!\n", m_real_file);
         goto Done;
     }
     /*判断"文件"是否是目录*/
     if(S_ISDIR(m_file_stat.st_mode)){
         ret = BAD_REQUEST;
-        LOG(LEV_ERROR, "File [%s] is a dir!", m_real_file);
+        LOG(LEV_ERROR, "File [%s] is a dir!\n", m_real_file);
         goto Done;
     }
 
@@ -668,7 +669,7 @@ oal_bool http_parse::add_rsp_to_write_buffer(oal_const oal_int8 *format, ...){
     va_end(arg_list);
     m_write_idx += add_len;
 
-    LOG(LEV_ERROR, "Fd[%d]'s request:%s", m_socket, m_write_buf);
+    LOG(LEV_ERROR, "Fd[%d]'s request:%s\n", m_socket, m_write_buf);
 Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
