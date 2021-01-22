@@ -228,7 +228,7 @@ oal_bool http_parse::recv_client_data(){
     } else {
         m_read_idx += bytes_read;
         LOG(LEV_INFO, "connect[%d] recv [%d] bytes!\n", m_socket, bytes_read);
-        LOG(LEV_DEBUG, "\n[%d] bytes:\n", bytes_read, m_read_buf + m_read_idx);
+        //LOG(LEV_DEBUG, "\n[%d] bytes:\n", bytes_read, m_read_buf + m_read_idx);
         ret = true;
     }
 Failed:
@@ -362,7 +362,7 @@ oal_bool http_parse::process_construct_rsp(HTTP_CODE parse_ret){
     m_iv_count = 1;
     m_bytes_to_send = m_write_idx;
 Done:
-    LOG(LEV_DEBUG, "Exit!\n");
+    LOG(LEV_DEBUG, "Exit![%d]\n", m_bytes_to_send);
     return ret;
 }
 oal_void http_parse::process_read_etc(){
@@ -669,7 +669,7 @@ oal_bool http_parse::add_rsp_to_write_buffer(oal_const oal_int8 *format, ...){
     va_end(arg_list);
     m_write_idx += add_len;
 
-    LOG(LEV_ERROR, "Fd[%d]'s request:%s\n", m_socket, m_write_buf);
+    LOG(LEV_DEBUG, "Fd[%d]'s request:(%d,%d)%s\n", m_socket, add_len, m_write_idx, m_write_buf);
 Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
@@ -703,21 +703,21 @@ oal_bool http_parse::add_content_type(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
     /*暂时默认为text/html*/
-    ret = add_rsp_to_write_buffer("Content-Type:%s\r\n", "text/html");
+    ret = add_rsp_to_write_buffer("Content-Type:%s/r/n", "text/html");
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
 oal_bool http_parse::add_content_length(oal_int32 content_length){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-    ret = add_rsp_to_write_buffer("Content-Length:%d\r\n", content_length);
+    ret = add_rsp_to_write_buffer("Content-Length:%d/r/n", content_length);
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
 oal_bool http_parse::add_linger(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-    ret = add_rsp_to_write_buffer("Connection:%s\r\n", \
+    ret = add_rsp_to_write_buffer("Connection:%s/r/n", \
             (m_linger == true) ? "keep-alive" : "close");
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
@@ -764,7 +764,7 @@ oal_bool http_parse::send_request_rsp(){
             ret = false;
             goto Done;
         }
-
+        LOG(LEV_DEBUG, "Just send [%d] bytes\n", write_len);
         m_bytes_have_send += write_len;
         m_bytes_to_send -= write_len;
         if (m_bytes_to_send >= m_write_idx)
@@ -804,7 +804,7 @@ Done:
 oal_bool http_parse::process_write_etc(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-
+    ret =  send_request_rsp();
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
