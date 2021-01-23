@@ -93,7 +93,7 @@ private:
     oal_bool add_content_type();/*添加content类型*/
     oal_bool add_content_length(oal_int32 content_length);/*添加content长度*/
     oal_bool add_linger();/*添加Connection:字段*/
-    oal_bool add_blank_line();/*添加空行/r/n*/
+    oal_bool add_blank_line();/*添加空行\r\n*/
 
     /*发送响应报文以及涉及到的html等文件，到客户端 相关*/
     oal_void unmap();/*解除文件映射*/
@@ -318,6 +318,7 @@ oal_bool http_parse::process_construct_rsp(HTTP_CODE parse_ret){
         case FILE_REQUEST:
         {
             add_status_line(200, ok_200_title);
+            add_content_type();
             if (m_file_stat.st_size != 0)
             {
                 add_headers(m_file_stat.st_size);
@@ -580,7 +581,6 @@ http_parse::HTTP_CODE http_parse::dealwith_request(){
         这里的情况是welcome界面，请求服务器上的一个图片*/
         strcat(m_real_file, "/welcome.html");
     }
-
     if (stat(m_real_file, &m_file_stat) < 0){
         ret =  NO_RESOURCE;
         LOG(LEV_ERROR, "stat File [%s] error\n", m_real_file);
@@ -606,6 +606,7 @@ http_parse::HTTP_CODE http_parse::dealwith_request(){
     close(fd);
 
 Done:
+    LOG(LEV_DEBUG, "m_real_file:%s\n", m_real_file);
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
@@ -679,7 +680,7 @@ oal_bool http_parse::add_status_line(oal_int32 status, oal_const oal_int8 *title
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
     /*默认为HTTP/1.1*/
-    ret = add_rsp_to_write_buffer("%s %d %s/r/n", "HTTP/1.1", status, title);
+    ret = add_rsp_to_write_buffer("%s %d %s\r\n", "HTTP/1.1", status, title);
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
@@ -703,21 +704,21 @@ oal_bool http_parse::add_content_type(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
     /*暂时默认为text/html*/
-    ret = add_rsp_to_write_buffer("Content-Type:%s/r/n", "text/html");
+    ret = add_rsp_to_write_buffer("Content-Type:%s\r\n", "text/html");
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
 oal_bool http_parse::add_content_length(oal_int32 content_length){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-    ret = add_rsp_to_write_buffer("Content-Length:%d/r/n", content_length);
+    ret = add_rsp_to_write_buffer("Content-Length:%d\r\n", content_length);
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
 oal_bool http_parse::add_linger(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-    ret = add_rsp_to_write_buffer("Connection:%s/r/n", \
+    ret = add_rsp_to_write_buffer("Connection:%s\r\n", \
             (m_linger == true) ? "keep-alive" : "close");
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
@@ -725,7 +726,7 @@ oal_bool http_parse::add_linger(){
 oal_bool http_parse::add_blank_line(){
     LOG(LEV_DEBUG, "Enter!\n");
     oal_bool ret = true;
-    ret = add_rsp_to_write_buffer("%s", "/r/n");
+    ret = add_rsp_to_write_buffer("%s", "\r\n");
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
 }
