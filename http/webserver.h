@@ -561,25 +561,27 @@ http_parse::HTTP_CODE http_parse::dealwith_request(){
         strcat(m_real_file, "/default.html");
 
     /*如果请求资源为/0，表示跳转注册界面*/
-    } else if(*(request_file_index + 1) == 0){
+    } else if(*(request_file_index + 1) == '0'){
         strcat(m_real_file, "/register.html");
 
     /*如果请求资源为/1，表示跳转登录界面*/
-    } else if(*(request_file_index + 1) == 1){
+    } else if(*(request_file_index + 1) == '1'){
         strcat(m_real_file, "/log.html");
 
     /*如果请求资源为/5，表示跳转图片界面*/    
-    } else if(*(request_file_index + 1) == 5){
+    } else if(*(request_file_index + 1) == '5'){
         strcat(m_real_file, "/picture.html");
 
     /*如果请求资源为/6，表示跳转视频界面*/    
-    } else if(*(request_file_index + 1) == 6){
+    } else if(*(request_file_index + 1) == '6'){
         strcat(m_real_file, "/video.html");
 
     } else {
         /*如果以上均不符合
         这里的情况是welcome界面，请求服务器上的一个图片*/
-        strcat(m_real_file, "/welcome.html");
+        //strcat(m_real_file, "/welcome.html");
+        //注释尚未更新
+        strncpy(m_real_file + rdir_name_len, m_url, FILENAME_LEN - rdir_name_len - 1);
     }
     if (stat(m_real_file, &m_file_stat) < 0){
         ret =  NO_RESOURCE;
