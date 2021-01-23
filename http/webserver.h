@@ -219,7 +219,7 @@ oal_bool http_parse::recv_client_data(){
     }
     bytes_read = recv(m_socket, m_read_buf + m_read_idx, READ_BUFFER_MAX - m_read_idx, 0);
     if(bytes_read == 0){
-        LOG(LEV_INFO, "current connect[%d] is disconnected\n");
+        LOG(LEV_INFO, "current connect[%d] is disconnected\n", m_socket);
         LOG_ERRNO("ERROR CODE");
         ret = false;
     } else if(bytes_read < 0){
@@ -318,7 +318,7 @@ oal_bool http_parse::process_construct_rsp(HTTP_CODE parse_ret){
         case FILE_REQUEST:
         {
             add_status_line(200, ok_200_title);
-            add_content_type();
+            //add_content_type();
             if (m_file_stat.st_size != 0)
             {
                 add_headers(m_file_stat.st_size);
@@ -525,7 +525,7 @@ http_parse::HTTP_CODE http_parse::parse_request_content(oal_int8 *text){
         text[m_content_length] = '\0';
         m_string = text;
         ret = GET_REQUEST;
-        LOG(LEV_INFO, "Fd[%d] 's content is [%s]\n", m_string);
+        LOG(LEV_INFO, "Fd[%d] 's content is [%s]\n", m_socket, m_string);
     }
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;
@@ -670,7 +670,7 @@ oal_bool http_parse::add_rsp_to_write_buffer(oal_const oal_int8 *format, ...){
     va_end(arg_list);
     m_write_idx += add_len;
 
-    LOG(LEV_DEBUG, "Fd[%d]'s request:(%d,%d)%s\n", m_socket, add_len, m_write_idx, m_write_buf);
+    LOG(LEV_DEBUG, "Fd[%d]'s request:(%d,%d)\n%s\n", m_socket, add_len, m_write_idx, m_write_buf);
 Done:
     LOG(LEV_DEBUG, "Exit!\n");
     return ret;

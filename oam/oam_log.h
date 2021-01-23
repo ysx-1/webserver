@@ -20,7 +20,7 @@ oal_uint16 print_level = LEV_DEBUG;
 
 #define LOG(level, format, ...){\
     if(level <= print_level){\
-        printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__,##__VA_ARGS__);\
+        printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
     }\
 }
 //save_log_function(format, ##__VA_ARGS__);
