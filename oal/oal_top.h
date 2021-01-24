@@ -36,8 +36,11 @@
 #include <signal.h>
 //#include <bits/signum.h>
 
-/*memset函数相关头文件*/
+/*memset,strlen函数相关头文件*/
 #include <cstring>
+
+/*string数据类型等相关头文件*/
+#include <string>
 
 /*socket 相关*/
 #include <sys/types.h>
