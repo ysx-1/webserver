@@ -86,6 +86,11 @@ int main(){
 #endif
 
 #ifdef _WEB_SERVER_TEST
+	//数据库登录名,密码,库名
+	string user = "root";
+	string passwd = "4110";
+	string databasename = "ysxdb";
+
 	LOG(LEV_INFO,"web_server_test!\n");
 	web_server web_server_test;
 	web_server_test.init(9999, 5);

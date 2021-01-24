@@ -34,6 +34,7 @@
 
 /*信号相关头文件*/
 #include <signal.h>
+//#include <bits/signum.h>
 
 /*memset函数相关头文件*/
 #include <cstring>

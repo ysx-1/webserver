@@ -193,7 +193,10 @@ public:
             event.events = ev | EPOLLONESHOT | EPOLLRDHUP;
         return epoll_ctl(m_epoll_fd, EPOLL_CTL_MOD, fd, &event);
     }
-
+    /*设置alarm信号到来时间间隔*/
+    oal_int32 set_timer_slot(oal_int32 _seconds){
+        return alarm(_seconds);
+    }
     /*设置信号函数*/
     oal_int32 addsig(oal_int32 sig, oal_void(handler)(oal_int32), oal_bool restart = true){
         struct sigaction sa;

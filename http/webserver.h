@@ -814,6 +814,7 @@ oal_bool http_parse::process_write_etc(){
 
 class web_server{
     oal_static oal_const oal_int32 server_path_max_len = 200;
+    oal_static oal_const oal_int32 TIME_SLOT = 2;
 public:
     web_server();
     ~web_server();
@@ -920,8 +921,12 @@ oal_void web_server::eventlisten() {
     m_utils.m_sig_pipefd = m_sig_pipefd[1];
     /*屏蔽SIGPIPE信号*/
     m_utils.addsig(SIGPIPE, SIG_IGN);
+    /*添加ctrl+c信号处理*/
     m_utils.addsig(SIGINT, m_utils.sighandler, true);
-
+    /*添加alarm信号处理*/
+    m_utils.addsig(SIGALRM, m_utils.sighandler, true);   
+    /*设置定时时间*/
+    m_utils.set_timer_slot(TIME_SLOT);
     LOG(LEV_DEBUG, "Exit!\n");
 }
 oal_void web_server::eventloop() {
@@ -990,6 +995,10 @@ oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
                 case SIGINT:
                     LOG(LEV_WARN, "recv Ctrl+C signal(%d)\n", sigbuffer[i]);
                     eventLoop_stop = true;
+                    break;
+                case SIGALRM:
+                    LOG(LEV_WARN, "recv timer signal(%d)\n", sigbuffer[i]);
+                    m_utils.set_timer_slot(TIME_SLOT);
                     break;
                 default:
                     LOG(LEV_WARN, "recv other signal(%d)\n", sigbuffer[i]);
