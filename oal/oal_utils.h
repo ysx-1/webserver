@@ -222,7 +222,8 @@ public:
     }
 public:
     oal_static oal_int32 m_epoll_fd;/*内核事件表 epoll 描述符*/
-    oal_static oal_int32 m_sig_pipefd;
+    oal_static oal_int32 m_sig_pipefd;/*sig统一信号源*/
+    sort_timer_lst timer_lst;/*基于升序链表的定时器*/
 };
 oal_int32 utils::m_epoll_fd = -1;
 oal_int32 utils::m_sig_pipefd = -1;

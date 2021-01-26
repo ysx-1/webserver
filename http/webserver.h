@@ -66,7 +66,7 @@ public:
     http_parse(){};
     ~http_parse(){};
     oal_void process();
-    oal_void init(oal_int32 socket, struct sockaddr_in address);/*供主线程使用，初始化新的请求*/
+    oal_void init(oal_int32 socket, struct sockaddr_in address, timer_unit *timer);/*供主线程使用，初始化新的请求*/
     oal_void set_request_state(REQUEST_STATE state);/*设置当前用户的状态：读/写*/
     oal_static oal_void set_doc_root_dir(oal_int8 *root_dir);/*设置当前服务器的数据的根目录*/
 private:
@@ -137,6 +137,7 @@ private:
     oal_int32 m_bytes_to_send;/*记录要发送的响应报文的总字节数*/
     oal_int32 m_bytes_have_send;/*记录已经发送的响应报文的总字节数*/
     oal_static oal_int8 *m_doc_root_dir;/*服务器上文件(html或cgi或文件等)所在根目录，内存管理由webserver类负责*/
+    timer_unit *m_timer;/*非活动连接处理，无需进行内存管理，只是个指针*/
 };
 /*类的静态变量初始化*/
 oal_int32 http_parse::m_user_count = 0;
@@ -159,13 +160,14 @@ oal_void http_parse::process(){
     };
     LOG(LEV_DEBUG, "Exit!\n");
 }
-oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address){
+oal_void http_parse::init(oal_int32 socket, struct sockaddr_in address, timer_unit *timer){
     LOG(LEV_DEBUG, "Enter!\n");
     m_socket = socket;
     m_address = address;
     /*用户计数+1*/
     m_user_count++;
 
+    m_timer = timer;
     init();
     LOG(LEV_DEBUG, "Exit!\n");
 }
@@ -403,6 +405,8 @@ oal_void http_parse::close_conn(oal_bool real_close){
     m_utils.close_socket(m_socket);
     m_utils.removefd(m_socket);
     m_user_count--;
+    m_utils.timer_lst.erase_timer(m_timer);
+    m_timer = NULL;
     LOG(LEV_DEBUG, "Exit!\n");
 }
 http_parse::HTTP_CODE http_parse::parse_request_line(oal_int8 *text){
@@ -822,6 +826,7 @@ public:
     oal_void thread_pool();/*初始化线程池*/
     oal_void eventlisten();/*创建socket，绑定端口号，开始监听*/
     oal_void eventloop();/*循环处理请求*/
+    oal_static oal_void timeout_cb(timer_context* context);/*非活动连接处理函数*/
 private:
     oal_bool dealsignal(oal_bool &eventLoop_stop);
     oal_bool dealclientdata();
@@ -831,7 +836,7 @@ private:
     threadpool<http_parse> *m_pool;
     oal_int32 m_thread_nums;
     /*用户描述符*/
-    http_parse *users;
+    oal_static http_parse *users;
 
     /*监听socket相关*/
     oal_int16 m_port;
@@ -839,7 +844,7 @@ private:
     oal_int32 m_sig_pipefd[2];
 
     /*epoll 相关*/
-    utils m_utils;
+    oal_static utils m_utils;
     epoll_event events[MAX_EVENT_NUMBER];
 
     /*eventloop 停止标志位*/
@@ -848,9 +853,11 @@ private:
     /*服务器工作目录*/
     oal_int8 *m_doc_root_dir;
 
-    /*定时器链表，用来关闭非活动连接*/
-    sort_timer_lst m_timer_lst;
+    timer_context *timer_data;
 };
+/*为了让静态成员函数可以使用将其设置为静态成员变量*/
+http_parse* web_server::users = NULL;
+utils web_server::m_utils;
 
 web_server::web_server() {
     LOG(LEV_DEBUG, "Enter!\n");
@@ -860,6 +867,7 @@ web_server::web_server() {
 
     poolIsInit = false;
     users = new http_parse[MAX_FD];
+    timer_data = new timer_context[MAX_FD];
     m_doc_root_dir = new oal_int8[strlen(server_path) + strlen(root) + 1];
 
     /*获取服务进程所在工作目录*/
@@ -871,6 +879,7 @@ web_server::web_server() {
 web_server::~web_server() {
     LOG(LEV_DEBUG, "Enter!\n");
     delete []users;
+    delete []timer_data;
     delete []m_doc_root_dir;
     if (poolIsInit) delete m_pool;
     LOG(LEV_DEBUG, "Exit!\n");
@@ -930,6 +939,8 @@ oal_void web_server::eventlisten() {
     m_utils.addsig(SIGALRM, m_utils.sighandler, true);   
     /*设置定时时间*/
     m_utils.set_timer_slot(TIME_SLOT);
+    /*初始化升序定时器链表*/
+    m_utils.timer_lst.init();
     LOG(LEV_DEBUG, "Exit!\n");
 }
 oal_void web_server::eventloop() {
@@ -967,14 +978,19 @@ oal_void web_server::eventloop() {
                 LOG(LEV_ERROR, "TCP client close the connect\n");
                 m_utils.close_socket(sockfd);//close(sockfd);
                 m_utils.removefd(sockfd);
+
+                /*从非活动连接监测链表中剔除*/
+                m_utils.timer_lst.erase_timer(timer_data[sockfd].m_timer);
             } else if (events[i].events & EPOLLIN){
                 /*TCP 可读*/
                 users[sockfd].set_request_state(http_parse::READ);
                 m_pool->append(users + sockfd);
+                m_utils.timer_lst.adjust_timer(timer_data[sockfd].m_timer, 3 * TIME_SLOT);
             } else if (events[i].events & EPOLLOUT){
                 /*TCP 可读*/
                 users[sockfd].set_request_state(http_parse::WRITE);
                 m_pool->append(users + sockfd);
+                m_utils.timer_lst.adjust_timer(timer_data[sockfd].m_timer, 3 * TIME_SLOT);
             }else {
                 LOG(LEV_WARN, "something else happened \n");
             }
@@ -984,6 +1000,7 @@ oal_void web_server::eventloop() {
     m_utils.close_socket(m_listen_fd);
     m_utils.close_socket(m_utils.m_epoll_fd);
     m_utils.close_pairsocket(m_sig_pipefd);
+    m_utils.timer_lst.deinit();
     LOG(LEV_DEBUG, "Exit!\n");
 }
 oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
@@ -1006,6 +1023,7 @@ oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
 #ifdef _SORT_TIMER_LST_TEST
                     timer_list.tick();
 #endif
+                    m_utils.timer_lst.tick();
                     m_utils.set_timer_slot(TIME_SLOT);
                     break;
                 default:
@@ -1024,15 +1042,26 @@ oal_bool web_server::dealclientdata() {
     if (confd < 0){
         return false;
     } else {
-        m_utils.addfd(confd, true, 0);
         oal_int8 remote[INET_ADDRSTRLEN];
         LOG(LEV_INFO, "connected client [%s:%d]\n", inet_ntop(AF_INET, &client_addr.sin_addr,remote, INET_ADDRSTRLEN),
                 ntohs(client_addr.sin_port));
-        users[confd].init(confd, client_addr);
+        
+        timer_data[confd].init(confd, client_addr);
+        m_utils.timer_lst.insert_timer(3*TIME_SLOT, timeout_cb ,timer_data + confd);
+
+        users[confd].init(confd, client_addr, timer_data[confd].m_timer);
+        m_utils.addfd(confd, true, 0);
+
         /*重置m_tcp_socket 为oneshot*/
         m_utils.modfd(m_listen_fd, EPOLLIN, 0);
     }
     return true;
 }
-
+oal_void web_server::timeout_cb(timer_context* context){
+    LOG(LEV_DEBUG, "Enter!\n");
+    m_utils.close_socket(context->m_fd);
+    m_utils.removefd(context->m_fd);
+    users[context->m_fd].m_user_count--;
+    LOG(LEV_DEBUG, "Exit!\n");
+}
 #endif

@@ -13,7 +13,12 @@ class timer_unit;/*定时器链表单元前向声明*/
 struct timer_context;/*定时器回调函数上下文的前向声明*/
 typedef oal_void (*call_back_func) (timer_context*);/*timer回调函数宏定义*/
 
-struct timer_context{
+class timer_context{
+public:
+	oal_void init(oal_int32 fd, sockaddr_in address){
+		m_fd = fd;
+		m_address = address;
+	}
 	oal_int32  m_fd;
 	sockaddr_in m_address;
 	timer_unit *m_timer;
@@ -39,8 +44,8 @@ public:
 /*使用双向循环链表实现timer_list*/
 class sort_timer_lst{
 public:
-	sort_timer_lst();
-	~sort_timer_lst();
+	oal_void init();
+	oal_void deinit();
 	oal_void insert_timer(time_t time_slot, call_back_func cb, timer_context *context);/*time_slot为时间间隔，单位S*/
 	oal_void adjust_timer(timer_unit *timer, time_t time_slot);/*重新设置某个timer的到期时间，并调整在链表中的顺序*/
 	oal_void erase_timer(timer_unit *timer);/*删除某个timer并释放内存*/
@@ -53,19 +58,26 @@ private:
 	oal_void m_erase_timer(timer_unit *timer);
 
 	oal_bool is_empty();
+
+	oal_bool is_init;
 private:
-	timer_unit *m_head;
-	//timer_unit *m_tail;
+	oal_static timer_unit *m_head;
 };
+timer_unit* sort_timer_lst::m_head = NULL;
 
-
-sort_timer_lst::sort_timer_lst(){
+oal_void sort_timer_lst::init(){
 	m_head = new timer_unit(LONG_MAX);/*初始化timer_lst头，简化插入删除操作*/
 	m_head->m_pre = m_head;
 	m_head->m_next = m_head;
+	is_init = true;
 }
 
-sort_timer_lst::~sort_timer_lst(){
+oal_void sort_timer_lst::deinit(){
+	if(is_init == false){
+		LOG(LEV_WARN, "Timer list isnot init, dont need to deinit!\n");
+		return;
+	}
+	is_init = false;
 	timer_unit *tmp = m_head->m_next;
 	while(tmp != m_head){
 		delete tmp;
@@ -81,7 +93,7 @@ oal_void sort_timer_lst::insert_timer(time_t time_slot, call_back_func cb_fun, t
 	/*根据时间间隔计算绝对时间*/
 	time_t expire = time_slot + time(NULL);
 	context->m_timer = new timer_unit(expire, cb_fun, context);
-	LOG(LEV_DEBUG, "Insert a timer [%ld]\n", expire);
+	LOG(LEV_DEBUG, "Insert [%d]'s timer [%ld]s\n", context->m_fd, expire);
 	m_insert_timer(context->m_timer);
 
 	LOG(LEV_DEBUG, "Exit\n");
@@ -91,7 +103,7 @@ oal_void sort_timer_lst::adjust_timer(timer_unit *timer, time_t time_slot){
 
 	/*根据时间间隔计算绝对时间*/
 	time_t expire = time_slot + time(NULL);
-	
+	LOG(LEV_DEBUG, "Just [%d]'s timer to [%ld]s\n", timer->m_context->m_fd, expire);
 	/*先从链表中移除*/
 	m_erase_timer(timer);
 	
@@ -103,6 +115,7 @@ oal_void sort_timer_lst::adjust_timer(timer_unit *timer, time_t time_slot){
 }
 oal_void sort_timer_lst::erase_timer(timer_unit *timer){
 	LOG(LEV_DEBUG, "Enter\n");
+	LOG(LEV_DEBUG, "Erase [%d]'s timer [%ld]s\n", timer->m_context->m_fd, timer->m_expire);
 	m_erase_timer(timer);
 	if(timer != NULL){
 		LOG(LEV_DEBUG, "timer is'n NULL\n");
@@ -117,12 +130,12 @@ oal_void sort_timer_lst::tick(){
 	time_t cur_time = time(NULL);
 	timer_unit *tmp = NULL;
 	timer_unit *cur = m_head->m_next;
+	LOG(LEV_DEBUG,"cur expire = %ld!\n", cur_time);
 	if(is_empty()){
 		LOG(LEV_DEBUG, "Timer list is NULL now!\n");
 		goto Done;
 	}
 	while(cur != m_head){
-		LOG(LEV_DEBUG,"cur -> expire = %ld,%ld!\n", cur->m_expire, cur_time);
 		if(cur->m_expire >= cur_time)
 			break;
 		
