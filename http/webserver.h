@@ -1000,7 +1000,9 @@ oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
                     break;
                 case SIGALRM:
                     LOG(LEV_WARN, "recv timer signal(%d)\n", sigbuffer[i]);
+#ifdef _SORT_TIMER_LST_TEST
                     timer_list.tick();
+#endif
                     m_utils.set_timer_slot(TIME_SLOT);
                     break;
                 default:

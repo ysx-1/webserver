@@ -66,6 +66,7 @@ public:
         ret = bind(sock, (struct sockaddr*)&address, sizeof(address));
         if (ret != 0){
             LOG(LEV_ERROR, "socket bind failed!\n");
+            LOG_ERRNO("socket bind failed, because");
             close(sock);
             return ret;
         }

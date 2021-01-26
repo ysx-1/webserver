@@ -1,3 +1,5 @@
+clear
 make clean
 make
-mv server /home/sx/Desktop
+cp server /home/sx/Desktop
+./server
