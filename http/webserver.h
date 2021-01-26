@@ -814,7 +814,7 @@ oal_bool http_parse::process_write_etc(){
 
 class web_server{
     oal_static oal_const oal_int32 server_path_max_len = 200;
-    oal_static oal_const oal_int32 TIME_SLOT = 2;
+    oal_static oal_const oal_int32 TIME_SLOT = 5;
 public:
     web_server();
     ~web_server();
@@ -933,7 +933,9 @@ oal_void web_server::eventloop() {
     m_eventloop_stop = false;
     oal_int32 numbers = 0;
     oal_int32 sockfd = -1;
-
+#ifdef _SORT_TIMER_LST_TEST
+    sort_timer_lst_test();
+#endif
     LOG(LEV_DEBUG, "Enter!\n");
     while (!m_eventloop_stop){
         LOG(LEV_DEBUG, "EPOLL Wait!\n");
@@ -998,6 +1000,7 @@ oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
                     break;
                 case SIGALRM:
                     LOG(LEV_WARN, "recv timer signal(%d)\n", sigbuffer[i]);
+                    timer_list.tick();
                     m_utils.set_timer_slot(TIME_SLOT);
                     break;
                 default:

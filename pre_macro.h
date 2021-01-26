@@ -28,6 +28,9 @@
 /*Errno test*/
 //#define _ERRNO_TEST
 
+/*sort timer test*/
+//#define _SORT_TIMER_LST_TEST
+
 /*webserver:线程池+epoll+socket+http测试*/
 #define _WEB_SERVER_TEST
 

@@ -56,6 +56,9 @@
 /*writev函数头文件*/
 #include <sys/uio.h>
 
+/*INT_MAX头文件*/
+#include <limits.h>
+
 /*最大文件描述符个数*/
 #define MAX_FD 65536
 
