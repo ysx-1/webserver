@@ -847,6 +847,9 @@ private:
 
     /*服务器工作目录*/
     oal_int8 *m_doc_root_dir;
+
+    /*定时器链表，用来关闭非活动连接*/
+    sort_timer_lst m_timer_lst;
 };
 
 web_server::web_server() {

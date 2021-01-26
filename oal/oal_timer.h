@@ -92,8 +92,13 @@ oal_void sort_timer_lst::adjust_timer(timer_unit *timer, time_t time_slot){
 	/*根据时间间隔计算绝对时间*/
 	time_t expire = time_slot + time(NULL);
 	
+	/*先从链表中移除*/
+	m_erase_timer(timer);
+	
 	/*更新改timer的超时时间*/
 	timer->m_expire = expire;
+	
+	/*放回链表*/
 	m_insert_timer(timer);
 }
 oal_void sort_timer_lst::erase_timer(timer_unit *timer){
