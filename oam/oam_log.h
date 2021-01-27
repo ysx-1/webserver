@@ -25,6 +25,7 @@ oal_uint16 print_level = LEV_DEBUG;
 			printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
 		}\
 	}while(0)
+	
 //save_log_function(format, ##__VA_ARGS__);
 #define LOG_ERRNO(_title)\
 	do{\
