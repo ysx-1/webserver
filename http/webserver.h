@@ -762,7 +762,7 @@ oal_bool http_parse::send_request_rsp(){
         if(write_len < 0){
             if(errno == EAGAIN){
                 /*没有足够资源，执行失败，提示再试一次*/
-                LOG_ERRNO("writev error:")
+                LOG_ERRNO("writev error:");
                 m_utils.modfd(m_socket, EPOLLOUT, 0);
                 ret = true;
                 goto Done;

@@ -18,16 +18,18 @@ oal_uint16 print_level = LEV_DEBUG;
 
 //void save_log_function(oal_int8* format, ...);
 
-#define LOG(level, format, ...){\
-    if(level <= print_level){\
-        printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
-    }\
-}
+#define LOG(level, format, ...)\
+	do\
+	{\
+		if(level <= print_level){\
+			printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
+		}\
+	}while(0)
 //save_log_function(format, ##__VA_ARGS__);
 #define LOG_ERRNO(_title)\
 	do{\
 		LOG(LEV_ERROR, "%s:%s\n", _title, strerror(errno));\
-	}while(0);
+	}while(0)
 /*perror 等价于 const char *s: strerror(errno) //提示符：发生系统错误的原因*/
 #define LOG_ERRNO_CLEAN(_title) perror(_title);
 /*
