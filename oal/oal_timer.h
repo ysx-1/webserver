@@ -136,7 +136,7 @@ oal_void sort_timer_lst::tick(){
 		goto Done;
 	}
 	while(cur != m_head){
-		if(cur->m_expire >= cur_time)
+		if(cur->m_expire > cur_time)
 			break;
 		
 		/*当前timer超时，调用其callback，然后删除该timer*/
