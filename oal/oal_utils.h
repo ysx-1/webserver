@@ -42,7 +42,7 @@ public:
         }
         sock = socket(PF_INET, protocol, 0);
         if(sock == -1){
-            LOG(LEV_DEBUG, "socket create failed!\n");
+            LOG_ERRNO("socket create failed");
             return sock;
         }
         if (reuse){
@@ -76,7 +76,7 @@ public:
         oal_int32 ret = -1;
         ret = listen(sock, backlog);
         if (ret != 0){
-            LOG(LEV_ERROR, "_socket listen failed!\n");
+            LOG_ERRNO("socket listen failed")
             close(sock);
             return ret;
         }
@@ -164,6 +164,9 @@ public:
         epoll_event event;
         event.data.fd = fd;
         ret = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
+        if(ret == -1){
+            LOG_ERRNO("epoll_ctl[EPOLL_CTL_DEL]failed")
+        }
         close(fd);
         return ret;
     }
@@ -218,6 +221,12 @@ public:
         oal_int32 msg = sig;
         send(m_sig_pipefd, (char *)&msg, 1, 0);
         errno = save_errno;
+        LOG(LEV_DEBUG, "Exit!\n");
+    }
+    oal_void show_error(oal_int32 fd, oal_const oal_int8* msg){
+        LOG(LEV_DEBUG, "Enter!\n");
+        send(fd, msg, strlen(msg), 0);
+        close_socket(fd);
         LOG(LEV_DEBUG, "Exit!\n");
     }
 public:
