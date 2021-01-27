@@ -828,7 +828,7 @@ public:
     oal_void eventloop();/*循环处理请求*/
     oal_static oal_void timeout_cb(timer_context* context);/*非活动连接处理函数*/
 private:
-    oal_bool dealsignal(oal_bool &eventLoop_stop);
+    oal_bool dealsignal(oal_bool &eventLoop_stop, oal_bool &timeout);
     oal_bool dealclientdata();
 private:
     /*线程池相关*/
@@ -849,6 +849,9 @@ private:
 
     /*eventloop 停止标志位*/
     oal_bool m_eventloop_stop;
+
+    /*定时器超时标志位*/
+    oal_bool m_timeout;
 
     /*服务器工作目录*/
     oal_int8 *m_doc_root_dir;
@@ -945,6 +948,7 @@ oal_void web_server::eventlisten() {
 }
 oal_void web_server::eventloop() {
     m_eventloop_stop = false;
+    m_timeout = false;
     oal_int32 numbers = 0;
     oal_int32 sockfd = -1;
 #ifdef _SORT_TIMER_LST_TEST
@@ -969,18 +973,19 @@ oal_void web_server::eventloop() {
                 }
             } else if(sockfd == m_sig_pipefd[0] && events[i].events & EPOLLIN){
                 /*处理信号*/
-                oal_bool flag = dealsignal(m_eventloop_stop);
+                oal_bool flag = dealsignal(m_eventloop_stop, m_timeout);
                 if (flag == false){
                     LOG(LEV_ERROR, "dealsignal failed!\n");
                 }
             } else if (events[i].events & (EPOLLRDHUP | EPOLLERR)){
                 /*TCP client异常断开*/
                 LOG(LEV_ERROR, "TCP client close the connect\n");
-                m_utils.close_socket(sockfd);//close(sockfd);
-                m_utils.removefd(sockfd);
 
                 /*从非活动连接监测链表中剔除*/
                 m_utils.timer_lst.erase_timer(timer_data[sockfd].m_timer);
+
+                /*关闭confd。从内核时间表中移除，总用户数减一*/
+                timeout_cb(&timer_data[sockfd]);
             } else if (events[i].events & EPOLLIN){
                 /*TCP 可读*/
                 users[sockfd].set_request_state(http_parse::READ);
@@ -995,6 +1000,12 @@ oal_void web_server::eventloop() {
                 LOG(LEV_WARN, "something else happened \n");
             }
         }
+        if(m_timeout){
+            m_timeout = false;
+            m_utils.timer_lst.tick();
+            /*重新开启“闹钟”*/
+            m_utils.set_timer_slot(TIME_SLOT);
+        }
         LOG(LEV_DEBUG, "the end of once epoll_wait\n");
     }
     m_utils.close_socket(m_listen_fd);
@@ -1003,7 +1014,7 @@ oal_void web_server::eventloop() {
     m_utils.timer_lst.deinit();
     LOG(LEV_DEBUG, "Exit!\n");
 }
-oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
+oal_bool web_server::dealsignal(oal_bool &eventLoop_stop, oal_bool &timeout) {
     oal_int32 ret = -1;
     oal_int8 sigbuffer[1024];
     ret = recv(m_sig_pipefd[0], sigbuffer, sizeof(sigbuffer), 0);
@@ -1023,8 +1034,7 @@ oal_bool web_server::dealsignal(oal_bool &eventLoop_stop) {
 #ifdef _SORT_TIMER_LST_TEST
                     timer_list.tick();
 #endif
-                    m_utils.timer_lst.tick();
-                    m_utils.set_timer_slot(TIME_SLOT);
+                    m_timeout = true;
                     break;
                 default:
                     LOG(LEV_WARN, "recv other signal(%d)\n", sigbuffer[i]);
@@ -1038,14 +1048,22 @@ oal_bool web_server::dealclientdata() {
     oal_int32 confd = -1;
     struct sockaddr_in client_addr;
     socklen_t addr_len = 0;
+
     confd = accept(m_listen_fd, (struct sockaddr*)&client_addr, &addr_len);
     if (confd < 0){
+        LOG_ERRNO("Accept new connect failed");
         return false;
     } else {
         oal_int8 remote[INET_ADDRSTRLEN];
         LOG(LEV_INFO, "connected client [%s:%d]\n", inet_ntop(AF_INET, &client_addr.sin_addr,remote, INET_ADDRSTRLEN),
                 ntohs(client_addr.sin_port));
         
+        if (http_parse::m_user_count >= MAX_FD) {
+            m_utils.show_error(confd, "Internal server busy");
+            LOG(LEV_ERROR, "Internal server busy,refuse new connect!");
+            return false;
+        }
+
         timer_data[confd].init(confd, client_addr);
         m_utils.timer_lst.insert_timer(3*TIME_SLOT, timeout_cb ,timer_data + confd);
 
@@ -1059,6 +1077,7 @@ oal_bool web_server::dealclientdata() {
 }
 oal_void web_server::timeout_cb(timer_context* context){
     LOG(LEV_DEBUG, "Enter!\n");
+    /*关闭confd。从内核时间表中移除，总用户数减一*/
     m_utils.close_socket(context->m_fd);
     m_utils.removefd(context->m_fd);
     users[context->m_fd].m_user_count--;
