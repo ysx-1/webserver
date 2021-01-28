@@ -102,7 +102,7 @@ oal_uint16 print_level = LEV_OFF;//LEV_DEBUG;
 oal_uint16 save_level = LEV_DEBUG;
 //#define save_level LEV_DEBUG
 
-oal_inline oal_void save_log_function(oal_const oal_int8* format, ...);
+oal_void save_log_function(oal_const oal_int8* format, ...);
 
 #define LOG(level, format, ...)\
 	do\
@@ -134,7 +134,7 @@ oal_inline oal_void save_log_function(oal_const oal_int8* format, ...);
 */
 
 
-oal_void save_log_function(oal_const oal_int8* format, ...){
+oal_inline oal_void save_log_function(oal_const oal_int8* format, ...){
 	oal_int8 buffer[256];
 	va_list ptr;
 	va_start(ptr, format);
