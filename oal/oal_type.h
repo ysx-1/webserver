@@ -20,5 +20,6 @@
 #define oal_void void
 #define oal_static static
 #define oal_const const
+#define oal_inline inline
 
 #endif
