@@ -59,6 +59,9 @@
 /*INT_MAX头文件*/
 #include <limits.h>
 
+/*gettimeofday头文件*/
+#include <sys/time.h>
+
 /*最大文件描述符个数*/
 #define MAX_FD 65536
 
