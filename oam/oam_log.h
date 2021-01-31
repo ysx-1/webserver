@@ -5,23 +5,7 @@
 	保存LOG相关 
 */
 #include "../prepare.h"
-enum LOG_LEVEL{
-	LEV_OFF   = 0,
-	LEV_ERROR = 1,
-	LEV_WARN  = 2,
-	LEV_INFO  = 3,
-	LEV_DEBUG = 4,
-	LEV_TOP   = 5,
-};
-oal_uint16 m_print_level = LEV_DEBUG;
 
-#define MT_LOG(level, format, ...)\
-	do\
-	{\
-		if(level <= m_print_level){\
-			printf("[MT_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
-		}\
-	}while(0)
 /*单例模式，LOG类，用于LOG的保存文件处理*/
 class LogMnmg{
 public: 
@@ -32,6 +16,7 @@ public:
 public:
 	oal_static oal_const oal_int32 MAX_FILE_LEN = 128; 
 private:
+	blockQueue<std::string> m_blockQueue;
 	oal_int64 m_count;/*当前文件中写入LOG的个数*/
 	oal_bool m_open;/*记录当前日志保存是否打开，默认开启*/
 	oal_bool m_async_flag;/*是否异步，默认同步*/
@@ -97,9 +82,9 @@ oal_bool LogMnmg::Init(oal_const oal_int8 *file_name, oal_int32 line_max, oal_in
 	MT_LOG(LEV_DEBUG, "Exit\n");
 	return true;
 }
-oal_uint16 print_level = LEV_OFF;//LEV_DEBUG;
+oal_uint16 print_level = LEV_DEBUG;//LEV_DEBUG;
 //#define print_level LEV_DEBUG
-oal_uint16 save_level = LEV_DEBUG;
+oal_uint16 save_level = LEV_OFF;//LEV_DEBUG;
 //#define save_level LEV_DEBUG
 
 oal_void save_log_function(oal_const oal_int8* format, ...);
@@ -120,11 +105,10 @@ oal_void save_log_function(oal_const oal_int8* format, ...);
 			};\
 		}\
 	}while(0)
-	
 #define LOG_ERRNO(_title)\
-	do{\
-		LOG(LEV_ERROR, "%s:%s\n", _title, strerror(errno));\
-	}while(0)
+do{\
+	LOG(LEV_ERROR, "%s:%s\n", _title, strerror(errno));\
+}while(0)
 /*perror 等价于 const char *s: strerror(errno) //提示符：发生系统错误的原因*/
 #define LOG_ERRNO_CLEAN(_title) perror(_title);
 /*
@@ -132,8 +116,6 @@ oal_void save_log_function(oal_const oal_int8* format, ...);
   errno: 133      Memory page has hardware error
   errno: 134~255  unknown error!
 */
-
-
 oal_inline oal_void save_log_function(oal_const oal_int8* format, ...){
 	oal_int8 buffer[256];
 	va_list ptr;
