@@ -68,6 +68,51 @@ int main(){
 	LOG(LEV_INFO,"Aid learning test888!\n");
 #endif
 
+#ifdef _BLOCKQUEUE_TEST
+	LOG(LEV_INFO,"Block queue test!\n");
+	blockQueue<int> m_queue(3);
+	int tmp = -1;
+	m_queue.Push(2);
+	m_queue.showArray();
+	m_queue.show();
+
+	m_queue.Push(3);
+	m_queue.showArray();
+	m_queue.show();
+
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+	m_queue.show();
+
+	m_queue.Push(4);
+	m_queue.showArray();
+	m_queue.show();
+
+	m_queue.Push(5);
+	m_queue.showArray();
+
+	m_queue.Push(6);
+	m_queue.showArray();
+
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+	
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+	
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+	
+	m_queue.Pop(tmp);m_queue.showArray();
+	
+	m_queue.Pop(tmp);
+	m_queue.showArray();
+	
+#endif
+
 #ifdef _ERRNO_TEST
 	LOG_ERRNO("errno test 1");
 	oal_int32 oldErrno = errno;

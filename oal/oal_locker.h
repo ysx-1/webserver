@@ -84,13 +84,13 @@
 		/*等待条件变量*/
 		bool wait(){
 			oal_uint8 ret = 0;
-			LOG(LEV_DEBUG, "1\n");
+			MT_LOG(LEV_DEBUG, "1\n");
 			pthread_mutex_lock(&m_mutex);
-			LOG(LEV_DEBUG, "2\n");
+			MT_LOG(LEV_DEBUG, "2\n");
 			ret = pthread_cond_wait(&m_cond, &m_mutex);
-			LOG(LEV_DEBUG, "3\n");
+			MT_LOG(LEV_DEBUG, "3\n");
 			pthread_mutex_unlock(&m_mutex);
-			LOG(LEV_DEBUG, "4\n");
+			MT_LOG(LEV_DEBUG, "4\n");
 			return ret == 0;
 		}
 		/*唤醒等待条件变量的线程*/

@@ -74,7 +74,7 @@ oal_void sort_timer_lst::init(){
 
 oal_void sort_timer_lst::deinit(){
 	if(is_init == false){
-		LOG(LEV_WARN, "Timer list isnot init, dont need to deinit!\n");
+		MT_LOG(LEV_WARN, "Timer list isnot init, dont need to deinit!\n");
 		return;
 	}
 	is_init = false;
@@ -88,22 +88,22 @@ oal_void sort_timer_lst::deinit(){
 }
 
 oal_void sort_timer_lst::insert_timer(time_t time_slot, call_back_func cb_fun, timer_context *context){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 
 	/*根据时间间隔计算绝对时间*/
 	time_t expire = time_slot + time(NULL);
 	context->m_timer = new timer_unit(expire, cb_fun, context);
-	LOG(LEV_DEBUG, "Insert [%d]'s timer [%ld]s\n", context->m_fd, expire);
+	MT_LOG(LEV_DEBUG, "Insert [%d]'s timer [%ld]s\n", context->m_fd, expire);
 	m_insert_timer(context->m_timer);
 
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 }
 oal_void sort_timer_lst::adjust_timer(timer_unit *timer, time_t time_slot){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 
 	/*根据时间间隔计算绝对时间*/
 	time_t expire = time_slot + time(NULL);
-	LOG(LEV_DEBUG, "Just [%d]'s timer to [%ld]s\n", timer->m_context->m_fd, expire);
+	MT_LOG(LEV_DEBUG, "Just [%d]'s timer to [%ld]s\n", timer->m_context->m_fd, expire);
 	/*先从链表中移除*/
 	m_erase_timer(timer);
 	
@@ -114,25 +114,25 @@ oal_void sort_timer_lst::adjust_timer(timer_unit *timer, time_t time_slot){
 	m_insert_timer(timer);
 }
 oal_void sort_timer_lst::erase_timer(timer_unit *timer){
-	LOG(LEV_DEBUG, "Enter\n");
-	LOG(LEV_DEBUG, "Erase [%d]'s timer [%ld]s\n", timer->m_context->m_fd, timer->m_expire);
+	MT_LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Erase [%d]'s timer [%ld]s\n", timer->m_context->m_fd, timer->m_expire);
 	m_erase_timer(timer);
 	if(timer != NULL){
-		LOG(LEV_DEBUG, "timer is'n NULL\n");
+		MT_LOG(LEV_DEBUG, "timer is'n NULL\n");
 		delete timer;
 	}
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 }
 
 oal_void sort_timer_lst::tick(){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	/*获取当前时间*/
 	time_t cur_time = time(NULL);
 	timer_unit *tmp = NULL;
 	timer_unit *cur = m_head->m_next;
-	LOG(LEV_DEBUG,"cur expire = %ld!\n", cur_time);
+	MT_LOG(LEV_DEBUG,"cur expire = %ld!\n", cur_time);
 	if(is_empty()){
-		LOG(LEV_DEBUG, "Timer list is NULL now!\n");
+		MT_LOG(LEV_DEBUG, "Timer list is NULL now!\n");
 		goto Done;
 	}
 	while(cur != m_head){
@@ -142,17 +142,17 @@ oal_void sort_timer_lst::tick(){
 		/*当前timer超时，调用其callback，然后删除该timer*/
 		cur->m_cb_fun(cur->m_context);
 		tmp = cur;
-		LOG(LEV_DEBUG, "012\n");
+		MT_LOG(LEV_DEBUG, "012\n");
 		cur = cur->m_next;
-		LOG(LEV_DEBUG, "0123\n");
+		MT_LOG(LEV_DEBUG, "0123\n");
 		erase_timer(tmp);
 	}
 Done:
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 	return;
 }
 oal_void sort_timer_lst::m_insert_timer(timer_unit *timer){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	timer_unit *target_back = NULL;
 	/*只有一个list头的情况也适用*/
 	target_back = m_head->m_next;
@@ -167,17 +167,17 @@ oal_void sort_timer_lst::m_insert_timer(timer_unit *timer){
 	timer->m_next->m_pre = timer;
 
 Done:
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 	return;
 }
 oal_void sort_timer_lst::m_erase_timer(timer_unit *timer){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	if(timer == NULL || timer == m_head) {
-		LOG(LEV_WARN, "Timer is invalid!\n");
+		MT_LOG(LEV_WARN, "Timer is invalid!\n");
 		goto Done;
 	}
 	if(is_empty()){
-		LOG(LEV_WARN, "Timer list is NULL!\n");
+		MT_LOG(LEV_WARN, "Timer list is NULL!\n");
 		goto Done;
 	}
 	timer->m_next->m_pre = timer->m_pre;
@@ -186,7 +186,7 @@ oal_void sort_timer_lst::m_erase_timer(timer_unit *timer){
 	timer->m_next = NULL;
 	timer->m_pre = NULL;
 Done:	
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 	return;
 }
 oal_bool sort_timer_lst::is_empty(){
@@ -201,11 +201,11 @@ timer_context context;
 oal_const oal_int32 test_slot = 2;
 
 oal_void cb_test(timer_context *context){
-	LOG(LEV_DEBUG, "This timer user's fd is %d\n", context->m_fd++);
+	MT_LOG(LEV_DEBUG, "This timer user's fd is %d\n", context->m_fd++);
 }
 
 oal_void sort_timer_lst_test(){
-	LOG(LEV_DEBUG, "Enter\n");
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	context.m_fd = 1;
 	timer_list.insert_timer(test_slot, cb_test, &context);
 
@@ -215,7 +215,7 @@ oal_void sort_timer_lst_test(){
 
 	timer_list.insert_timer(2 * test_slot, cb_test, &context);
 
-	LOG(LEV_DEBUG, "Exit\n");
+	MT_LOG(LEV_DEBUG, "Exit\n");
 }
 
 #endif

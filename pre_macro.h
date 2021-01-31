@@ -25,6 +25,9 @@
 /*Aid learning test*/
 #define _AID_LEARNING_TEST
 
+/*BlockQueue Test*/
+#define _BLOCKQUEUE_TEST
+
 /*Errno test*/
 //#define _ERRNO_TEST
 

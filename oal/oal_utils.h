@@ -28,21 +28,21 @@ public:
         oal_int32 reflag = 1;/*socket 可重用标志位*/
         switch (proto_type) {
             case PROTO_TCP:
-                LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
+                MT_LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
                 protocol = SOCK_STREAM;
                 break;
             case PROTO_UDP:
-                LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
+                MT_LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
                 protocol = SOCK_DGRAM;
                 break;
             default:
-                LOG(LEV_ERROR, "recv unknow protocol(%d)\n", proto_type);
+                MT_LOG(LEV_ERROR, "recv unknow protocol(%d)\n", proto_type);
                 return sock;
                 break;
         }
         sock = socket(PF_INET, protocol, 0);
         if(sock == -1){
-            LOG_ERRNO("socket create failed");
+            MT_LOG_ERRNO("socket create failed");
             return sock;
         }
         if (reuse){
@@ -51,7 +51,7 @@ public:
         return sock;
     }
     oal_void close_socket(oal_int32 sock){
-        LOG(LEV_INFO, "close %d\n", sock);
+        MT_LOG(LEV_INFO, "close %d\n", sock);
         close(sock);
     }
     oal_int32 bind_socket(oal_int32 sock, oal_int16 port, oal_uint32 IPstr = INADDR_ANY){
@@ -65,8 +65,8 @@ public:
 
         ret = bind(sock, (struct sockaddr*)&address, sizeof(address));
         if (ret != 0){
-            LOG(LEV_ERROR, "socket bind failed!\n");
-            LOG_ERRNO("socket bind failed, because");
+            MT_LOG(LEV_ERROR, "socket bind failed!\n");
+            MT_LOG_ERRNO("socket bind failed, because");
             close(sock);
             return ret;
         }
@@ -76,7 +76,7 @@ public:
         oal_int32 ret = -1;
         ret = listen(sock, backlog);
         if (ret != 0){
-            LOG_ERRNO("socket listen failed");
+            MT_LOG_ERRNO("socket listen failed");
             close(sock);
             return ret;
         }
@@ -87,28 +87,28 @@ public:
         oal_int32 protocol = -1;
         switch (proto_type) {
             case PROTO_TCP:
-                LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
+                MT_LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
                 protocol = SOCK_STREAM;
                 break;
             case PROTO_UDP:
-                LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
+                MT_LOG(LEV_INFO, "socket protocol(%d)\n", proto_type);
                 protocol = SOCK_DGRAM;
                 break;
             default:
-                LOG(LEV_ERROR, "recv unknow protocol(%d)\n", proto_type);
+                MT_LOG(LEV_ERROR, "recv unknow protocol(%d)\n", proto_type);
                 return ret;
                 break;
         }
         ret = socketpair(PF_UNIX, protocol, 0, fd);
         if (ret != 0){
-            LOG(LEV_ERROR, "socketpair create failed!\n");
+            MT_LOG(LEV_ERROR, "socketpair create failed!\n");
             return ret;
         }
         return ret;
     }
 
     oal_void close_pairsocket(int fd[2]){
-        LOG(LEV_DEBUG, "close %d, %d\n", fd[0], fd[1]);
+        MT_LOG(LEV_DEBUG, "close %d, %d\n", fd[0], fd[1]);
         close(fd[0]);
         close(fd[1]);
     }
@@ -165,7 +165,7 @@ public:
         event.data.fd = fd;
         ret = epoll_ctl(epfd, EPOLL_CTL_DEL, fd, NULL);
         if(ret == -1){
-            LOG_ERRNO("epoll_ctl[EPOLL_CTL_DEL]failed");
+            MT_LOG_ERRNO("epoll_ctl[EPOLL_CTL_DEL]failed");
         }
         close(fd);
         return ret;
@@ -214,20 +214,20 @@ public:
         return sigaction(sig, &sa, NULL);
     }
     oal_static oal_void sighandler(oal_int32 sig) {
-        LOG(LEV_DEBUG, "Enter!\n");
-        LOG(LEV_INFO, "recv signal(%d)\n", sig);
+        MT_LOG(LEV_DEBUG, "Enter!\n");
+        MT_LOG(LEV_INFO, "recv signal(%d)\n", sig);
         //为保证函数的可重入性，保留原来的errno
         oal_int32 save_errno = errno;
         oal_int32 msg = sig;
         send(m_sig_pipefd, (char *)&msg, 1, 0);
         errno = save_errno;
-        LOG(LEV_DEBUG, "Exit!\n");
+        MT_LOG(LEV_DEBUG, "Exit!\n");
     }
     oal_void show_error(oal_int32 fd, oal_const oal_int8* msg){
-        LOG(LEV_DEBUG, "Enter!\n");
+        MT_LOG(LEV_DEBUG, "Enter!\n");
         send(fd, msg, strlen(msg), 0);
         close_socket(fd);
-        LOG(LEV_DEBUG, "Exit!\n");
+        MT_LOG(LEV_DEBUG, "Exit!\n");
     }
 public:
     oal_static oal_int32 m_epoll_fd;/*内核事件表 epoll 描述符*/
