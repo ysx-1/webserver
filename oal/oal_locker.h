@@ -60,6 +60,9 @@
 		bool unlock(){
 			return pthread_mutex_unlock(&m_mutex) == 0;
 		}
+		pthread_mutex_t* getMutex(){
+			return &m_mutex;
+		}
 	private:
 		pthread_mutex_t m_mutex;
 	};
@@ -93,9 +96,28 @@
 			MT_LOG(LEV_DEBUG, "4\n");
 			return ret == 0;
 		}
+		/*等待条件变量*/
+		bool wait(pthread_mutex_t *mutex){
+			oal_uint8 ret = 0;
+			MT_LOG(LEV_DEBUG, "1\n");
+			ret = pthread_cond_wait(&m_cond, mutex);
+			MT_LOG(LEV_DEBUG, "4\n");
+			return ret == 0;
+		}
+		/*等待条件变量*/
+		bool wait_timeout(pthread_mutex_t *mutex, timespec time){
+			oal_uint8 ret = 0;
+			MT_LOG(LEV_DEBUG, "1\n");
+			ret = pthread_cond_timedwait(&m_cond, mutex, &time);
+			MT_LOG(LEV_DEBUG, "4\n");
+			return ret == 0;
+		}
 		/*唤醒等待条件变量的线程*/
 		bool signal(){
 			return pthread_cond_signal(&m_cond) == 0;
+		}
+		bool broadcast(){
+			return pthread_cond_broadcast(&m_cond) == 0;
 		}
 	private:
 		pthread_cond_t m_cond;
