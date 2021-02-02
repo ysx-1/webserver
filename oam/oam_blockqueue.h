@@ -73,8 +73,8 @@ blockQueue<T>::blockQueue(oal_int32 maxsize){
 template<typename T>
 blockQueue<T>::~blockQueue(){
 	MT_LOG(LEV_DEBUG, "Enter\n");
-
-	delete m_array;
+	if(m_array != NULL)
+		delete []m_array;
 	m_array = NULL;
 
 	MT_LOG(LEV_DEBUG, "Exit\n");
