@@ -135,7 +135,7 @@ int main(){
 	std::string user = "root";
 	std::string passwd = "4110";
 	std::string databasename = "ysxdb";
-
+	LogMnmg::GetInstance()->Init("server", 4096, 1024, 100);
 	LOG(LEV_INFO,"web_server_test!\n");
 	web_server web_server_test;
 	web_server_test.init(19999, 5);
