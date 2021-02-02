@@ -220,4 +220,13 @@ oal_void sort_timer_lst_test(){
 
 #endif
 
+struct tm * GetCutTime(struct tm * pTime){
+	time_t now = time(NULL);
+	localtime_r(&now, pTime);
+	pTime->tm_year += 1900;
+	pTime->tm_mon += 1;
+	MT_LOG(LEV_DEBUG, "[%04d-%02d-%02d %02d:%02d:%02d]\n", pTime->tm_year ,pTime->tm_mon, pTime->tm_mday, pTime->tm_hour, pTime->tm_min, pTime->tm_sec);
+	return pTime;
+}
+
 #endif //__OAL_TIMER_H
