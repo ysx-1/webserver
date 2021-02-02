@@ -50,7 +50,7 @@ LogMnmg::~LogMnmg(){
 	m_async_flag = true;
 	if(m_blockQueue != NULL){
 		delete m_blockQueue;
-		m_blockQueue = NULL
+		m_blockQueue = NULL;
 	}
 }
 /*懒汉式单例模式*/
