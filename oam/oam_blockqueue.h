@@ -116,7 +116,9 @@ template<typename T>
 oal_bool blockQueue<T>::Push_m(oal_const T &element){
 	MT_LOG(LEV_DEBUG, "Enter\n");
 	oal_bool ret = true;
+	MT_LOG(LEV_DEBUG, "1\n");
 	m_blockMutex.lock();
+	MT_LOG(LEV_DEBUG, "12\n");
 	if(isFull()){
 		MT_LOG(LEV_WARN, "BlockQueue is Full!\n");
 		//唤醒pop等待线程
@@ -124,6 +126,7 @@ oal_bool blockQueue<T>::Push_m(oal_const T &element){
 		m_blockMutex.unlock();
 		return false;
 	}
+	MT_LOG(LEV_DEBUG, "123\n");
 	m_array[m_tail] = element;
 	m_tail = advanceIndex(m_tail, 1); 
 	m_size++;
@@ -142,8 +145,10 @@ oal_bool blockQueue<T>::Pop_m(T &front){
 	m_blockMutex.lock();
 	if(isEmpty()){
 		MT_LOG(LEV_WARN, "BlockQueue is NULL!\n");
-		m_blockCon.wait(m_blockMutex.getMutex());
-		return false;
+		if(!m_blockCon.wait(m_blockMutex.getMutex())){
+			m_blockMutex.unlock();
+			return false;
+		}	
 	}
 	front = m_array[m_head];
 	m_head = advanceIndex(m_head, 1);
