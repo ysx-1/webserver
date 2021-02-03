@@ -99,6 +99,10 @@ oal_void threadpool<T>::run(oal_void){
     oal_int32 index = 0;
     while(!m_stop){
         m_queuestat.wait();
+        if(m_stop){
+            LOG(LEV_DEBUG, "[%lu] will over!\n", pthread_self());
+            break;
+        }
         LOG(LEV_DEBUG, "[%lu] is wakened %dth!\n", pthread_self(),index++);
         m_queuelocker.lock();
         if(m_workqueue.empty()){
