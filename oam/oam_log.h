@@ -24,6 +24,7 @@ private:
 	oal_static oal_int64 m_count;/*当前文件中写入LOG的个数*/
 	oal_bool m_open;/*记录当前日志保存是否打开，默认开启*/
 	oal_bool m_async_flag;/*是否异步，默认同步*/
+	oal_static oal_bool m_exit_flag;
 	oal_int64 m_day;/*记录当天的时间，用于更新LOG文件名*/
 	oal_static oal_int32 m_line_max;/*每个文件中，最大LOG数目，由init函数初始化*/
 	oal_int32 m_log_size_max;
@@ -36,22 +37,41 @@ private:
 /*静态成员的初始化*/
 oal_int64 LogMnmg::m_count = 0;
 oal_int32 LogMnmg::m_line_max = 0;
+oal_bool LogMnmg::m_exit_flag = false;
 oal_int8 LogMnmg::m_file_full_name[ 2 * MAX_FILE_LEN ] = {0};
 FILE * LogMnmg::m_fp = NULL;
 
 LogMnmg::LogMnmg(){
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	m_count = 0;
 	m_open = true;
 	m_async_flag = false;
+	MT_LOG(LEV_DEBUG, "Exit\n");
 }
 LogMnmg::~LogMnmg(){
+	MT_LOG(LEV_DEBUG, "Enter\n");
 	m_count = 0;
 	m_open = false;
 	m_async_flag = true;
+	m_exit_flag = true;
+	//std::string endStr = "[HELPER]Server is paused!\n";
+	/*唤醒异步写LOG线程，使其退出*/
+	//m_blockQueue->Push_m(endStr);
 	if(m_blockQueue != NULL){
-		delete m_blockQueue;
-		m_blockQueue = NULL;
+		//delete m_blockQueue;
+		//m_blockQueue = NULL;
 	}
+	MT_LOG(LEV_DEBUG, "11\n");
+	if(m_fp != NULL){
+		fclose(m_fp);
+		m_fp = NULL;
+	}
+	MT_LOG(LEV_DEBUG, "12\n");
+	if(m_buffer != NULL){
+		delete[] m_buffer;
+		m_buffer = NULL;
+	}
+	MT_LOG(LEV_DEBUG, "Exit\n");
 }
 /*懒汉式单例模式*/
 LogMnmg *LogMnmg::GetInstance(){
@@ -60,21 +80,22 @@ LogMnmg *LogMnmg::GetInstance(){
 }
 oal_inline oal_void LogMnmg::save_log_function(oal_const oal_int8* format, ...){
 	oal_int8 buffer[2048];
+	if(m_exit_flag) return;
 	va_list ptr;
 	va_start(ptr, format);
 	vsnprintf(buffer, sizeof(buffer) - 1, format, ptr);
 	va_end(ptr);
-	MT_LOG(LEV_DEBUG,"%s", buffer);
- 	this->m_blockQueue->Push_m(std::string(buffer));
+ 	m_blockQueue->Push_m(std::string(buffer));
 }
 oal_void* LogMnmg::SaveLogToFileThread(oal_void *arg){
 	MT_LOG(LEV_DEBUG, "Enter\n");
 	blockQueue<std::string> *blockQue = (blockQueue<std::string> *)arg;
-	bool m_exit_flag = false;
+	m_exit_flag = false;
 	std::string oneLog;
 	while(!m_exit_flag){
 		if(blockQue->Pop_m(oneLog)){
-			MT_LOG(LEV_DEBUG,"%s", oneLog.c_str());
+			//MT_LOG(LEV_DEBUG,"%s", oneLog.c_str());
+			if(m_exit_flag) break;
 			SaveLogToFile(oneLog.c_str(), oneLog.size());
 		}
 	}
@@ -140,7 +161,7 @@ oal_bool LogMnmg::Init(oal_const oal_int8 *file_name, oal_int32 line_max, oal_in
 	MT_LOG(LEV_DEBUG, "Exit\n");
 	return true;
 }
-oal_uint16 print_level = LEV_DEBUG;//LEV_DEBUG;//LEV_DEBUG;
+oal_uint16 print_level = LEV_DEBUG;//LEV_OFF;
 //#define print_level LEV_DEBUG
 oal_uint16 save_level = LEV_DEBUG;//LEV_DEBUG;
 //#define save_level LEV_DEBUG
@@ -151,7 +172,8 @@ oal_void save_log_function(oal_const oal_int8* format, ...);
 	do\
 	{\
 		if(level <= print_level){\
-			printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\
+			printf("[SERVER_DEBUG][%s]:" format, __FUNCTION__, ##__VA_ARGS__);\
+			/*printf("[SERVER_DEBUG][%s,%s:%d]:" format, __FILE__, __FUNCTION__, __LINE__, ##__VA_ARGS__);\*/\
 		}\
 		if(level <= save_level){\
 			struct tm curTime, *pTime;\
